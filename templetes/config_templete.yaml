@@ -1,0 +1,56 @@
+report:
+  policy_name: 'NAC Policy Name'
+  owner: ''
+  area_of_operation: ''
+  # the script will output the file in the same dir where it was ran, specify a path to change where you want to save it at.
+  destination_filepath: 'Absolute/Path/ISEDeviceReport.csv'
+  send_email: False
+  Command_name: 'self'
+  prepared_for: 'self'
+
+ise:
+  hostname: ''
+  ip: ''
+  auth_source: 'Internal'
+  #pipeline use ise_api creds in ise
+  username: None
+  password: None
+  pipeline: False
+
+smtp:
+  email: ''
+  password: False
+  server: ''
+  port: 25
+  destination_email: ''
+  destination_email_cc:
+    - ''
+  body: ''
+
+# if you have custom profiles and want them to fall under another profile for the report in the key value enter the real
+# name and  in the value portion enter the name it should go in the report
+custom_profiles_match:
+  - 'test': 'Unknown'
+  - 'test': 'Unknown'
+  - test': 'Unknown'
+  - 'test': 'Microsoft-Workstation'
+  - 'test': 'Microsoft-Workstation'
+  - 'test': 'Microsoft-Workstation'
+
+# logical buckets to which endpoints will be matched too. these are created from ISE logical profile
+endpoint_buckets_match:
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'unknown'
+
+# get all endpoints or just connected ones
+only_connected: True
+
+
+ComplytoConnect:
+  phase: 1
