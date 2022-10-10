@@ -236,3 +236,9 @@ cython_debug/
 
 .yaml
 
+/.yaml
+/.pfx
+
+/certificate_information/
+/logging/
+/Config_information/

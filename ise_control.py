@@ -4,7 +4,8 @@ import json
 import pandas as pd
 import requests
 
-from utilities import rutils, log_collector
+from utilities import Rutils, log_collector
+from requests_pkcs12 import Pkcs12Adapter
 
 requests.packages.urllib3.disable_warnings()
 
@@ -13,29 +14,42 @@ class ISE:
     HEADER_DATA = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:106.0) Gecko/20100101 Firefox/106.0',
     }
-    UTILS = rutils()
+    UTILS = Rutils()
 
     def __init__(self, config: str = "config.yaml"):
         self.logger = log_collector()
-        self.config = rutils.get_yaml_config(config, self)
 
-        # ISE TACACS username and password
-        if self.config['ise']['pipeline']:
-            ise_username = self.config['ise']['username']
-            ise_password = self.config['ise']['password']
-        else:
-            ise_username = input("What is your TACACS username? ")
-            ise_password = input("What is your TACACS password? ")
+        # move config file to new folder
+        config = self.UTILS.create_file_path('Config_information', config)
+        self.config = self.UTILS.get_yaml_config(config, self)
+
+        # ISE username and password
+        if self.config['authentication']['text_based']['use']:
+            self.login_type = 'text'
+            if self.config['authentication']['pipeline']:
+                ise_username = self.config['authentication']['text_based']['username']
+                ise_password = self.config['authentication']['text_based']['password']
+            else:
+                ise_username = input("username: ")
+                ise_password = input("password: ")
+
+            # encode cred str to pass as a post msg to ISE
+            self.user = self.UTILS.encode_data(ise_username,base64=False)
+            self.password = self.UTILS.encode_data(ise_password,base64=False)
+            self.auth_source = self.config['authentication']['text_based']['auth_source']
+        # cert based
+        elif self.config['authentication']['cert_based']['use']:
+            self.login_type = 'cert'
+            cert_location = self.config['authentication']['cert_based']['cert_pfx_location']
+            # move cert to new folder
+            self.cert_location = self.UTILS.create_file_path('certificate_information',cert_location)
+            self.cert_passwd = self.config['authentication']['cert_based']['cert_password']
 
         # auth information
         self.ip = self.config['ise']['ip']
-        self.user = ise_username
-        self.password = ise_password
-        self.auth_source = self.config['ise']['auth_source']
         # session information
         self.get_session()
         self.init_ise_session()
-
         self.phase = self.config['ComplytoConnect']['phase']
 
     def get_session(self):
@@ -45,8 +59,6 @@ class ISE:
 
     def init_ise_session(self):
         url_csrf = f"https://{self.ip}/admin/JavaScriptServlet"
-        url_login = f"https://{self.ip}/admin/LoginAction.do"
-
         # obtain CSRF token
         token_info = None
         csrf_header = self.HEADER_DATA.copy()
@@ -57,30 +69,37 @@ class ISE:
                 token_info = response.text.split(':')
                 self.csrf_token = {token_info[0]: token_info[1]}
 
-        # get login session
-        login_payload = f"username={self.user}" \
-                        f"&password={self.password}" \
-                        f"&samlLogin=false" \
-                        f"&rememberme=on" \
-                        f"&name={self.user}" \
-                        f"&password={self.password}" \
-                        f"&authType={self.auth_source}" \
-                        f"&newPassword=" \
-                        f"&destinationURL=" \
-                        f"&CSRFTokenNameValue={token_info[0]}%{token_info[1]}" \
-                        f"&OWASP_CSRFTOKEN={token_info[1]}" \
-                        f"&locale=en&" \
-                        f"hasSelectedLocale=false"
+        if self.login_type == 'login':
+            url_login = f"https://{self.ip}/admin/LoginAction.do"
+            login_payload = f"username={self.user}" \
+                            f"&password={self.password}" \
+                            f"&samlLogin=false" \
+                            f"&rememberme=on" \
+                            f"&name={self.user}" \
+                            f"&password={self.password}" \
+                            f"&authType={self.auth_source}" \
+                            f"&newPassword=" \
+                            f"&destinationURL=" \
+                            f"&CSRFTokenNameValue={token_info[0]}%{token_info[1]}" \
+                            f"&OWASP_CSRFTOKEN={token_info[1]}" \
+                            f"&locale=en&" \
+                            f"hasSelectedLocale=false"
 
-        login_header = self.HEADER_DATA.copy()
-        login_header['Content-Type'] = 'application/x-www-form-urlencoded'
-        response = self.session.post(url_login, data=login_payload, headers=login_header, verify=False, allow_redirects=True)
-        if response.status_code == 200:
-            if 'lastLoginSuccess' in response.text:
-                self.HEADER_DATA.update(self.csrf_token)
-                self.logger.info('Authentication Successful')
-                return True
-        self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
+            login_header = self.HEADER_DATA.copy()
+            login_header['Content-Type'] = 'application/x-www-form-urlencoded'
+            response = self.session.post(url_login, data=login_payload, headers=login_header, verify=False, allow_redirects=True)
+            if response.status_code == 200:
+                if 'lastLoginSuccess' in response.text:
+                    self.HEADER_DATA.update(self.csrf_token)
+                    self.logger.info('CSRF TOKEN Obtained')
+                    self.logger.info('Authentication Successful')
+                    return True
+            self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
+
+        else:
+            self.session.mount(f"https://{self.ip}", Pkcs12Adapter(pkcs12_filename=self.cert_location, pkcs12_password=self.cert_passwd))
+            self.HEADER_DATA.update(self.csrf_token)
+            self.logger.info('CSRF TOKEN Obtained')
 
     def get_all_endpoint_data(self):
         endpoints = []
@@ -101,8 +120,8 @@ class ISE:
             # change header for search params
             header = self.HEADER_DATA.copy()
             header['_QPH_'] = self.UTILS.encode_data(search_field)
-
             response = self.session.get(f'https://{self.ip}/admin/rs/uiapi/visibility', headers=header)
+
             if response.status_code == 200:
                 ep_data = response.json()
                 if len(ep_data) > 0:

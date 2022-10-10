@@ -1,14 +1,15 @@
 from base64 import b64encode
 from gzip import open as gzopen
 from logging.handlers import TimedRotatingFileHandler
-from os import path, makedirs, rename, remove
+from os import path, makedirs, rename, remove, replace
+from urllib.parse import quote as url_quote
 
 import yaml
 
 import logging
 
 
-class rutils:
+class Rutils:
 
     def verify_config(self, config):
         return all(self.cfg[config].values())
@@ -25,22 +26,32 @@ class rutils:
 
     @staticmethod
     def create_file_path(folder: str, file_name: str):
-        top_dir = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv', 'log', 'txt']
+        TOP_DIR = path.dirname(path.abspath(__file__))
+        allowed_exts = ['csv', 'log', 'yaml','pfx','pem']
 
         input_ext = '.'.join(file_name.split(".")[1:])
-        if input_ext not in allowed_exts:
+        if input_ext.lower() not in allowed_exts:
             raise ValueError(f'please ensure you using one of the allowed file types you gave {input_ext}')
 
-        fName = f'{top_dir}/{folder}/{file_name}'
-        if not path.exists(f'{top_dir}/{folder}'):
-            makedirs(f'{top_dir}/{folder}')
+        fName = f'{TOP_DIR}/{folder}/{file_name}'
+        if not path.exists(f'{TOP_DIR}/{folder}'):
+            makedirs(f'{TOP_DIR}/{folder}')
+
+        # move file to correct dir if needed
+        if not path.exists(fName):
+            try:
+                replace(f'{TOP_DIR}/{file_name}', fName)
+            except:
+                # file has yet to be created or not in top path
+                pass
         return fName
 
     @staticmethod
     def encode_data(data, base64=True):
         if base64:
             return b64encode(str.encode(data)).decode('utf-8')
+        else:
+            return url_quote(data, safe='')
 
     @staticmethod
     def get_yaml_config(config, self_instance):
@@ -53,7 +64,7 @@ class rutils:
 
 
 def log_collector(log_all=False):
-    fName = rutils().create_file_path('logging', 'c2c_reporting_logs.log')
+    fName = Rutils().create_file_path('logging', 'c2c_reporting_logs.log')
 
     if not log_all:
         logger = logging.getLogger('ColdClarity')

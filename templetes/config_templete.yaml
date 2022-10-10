@@ -11,10 +11,19 @@ report:
 ise:
   hostname: ''
   ip: ''
-  auth_source: 'Internal'
+
+
+authentication:
+  text_based:
+    use: False
+    auth_source: 'Internal'
+    username: False
+    password: False
+  cert_based:
+    use: True
+    cert_pfx_location: 'ise_client_cert.pfx'
+    cert_password: False
   #pipeline use ise_api creds in ise
-  username: None
-  password: None
   pipeline: False
 
 smtp:

@@ -8,14 +8,14 @@ from tqdm import tqdm
 from ise_control import ISE
 from messaging import Messaging
 from test_control import ISETest, MessagingTest
-from utilities import rutils
+from utilities import Rutils
 
 
 class C2CReport:
     def __init__(self, config_file='config.yaml', test: int = 0, test_msg=False):
         self.timestr = time.strftime("%d%b%Y")
         self.top_dir = path.dirname(path.abspath(__file__))
-        self.utils = rutils()
+        self.utils = Rutils()
 
         if test:
             self.ise = ISETest(count_amt=test, config=config_file)
@@ -75,7 +75,7 @@ class C2CReport:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attachment_location=fname)
 
-    def create_ise_sw_hw_report(self, type_: 'software', hw_mac_list: list = None):
+    def create_ise_sw_hw_report(self, type_= 'software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
         import pandas as pd
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_phase{self.ise.phase}_{self.timestr}.csv')
