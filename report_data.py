@@ -60,6 +60,8 @@ class C2CReport:
                 logical_group = c2c_eps[c2c_eps['LogicalProfile'] == cat]
                 if not logical_group.empty:
                     writer.writerow([cat, logical_group.shape[0]])
+                else:
+                    writer.writerow([cat, 0])
             # endpoint policy summary
             writer.writerow([f'C2C-Step{self.ise.phase}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
             grouped_eps = c2c_eps.groupby(by=['EndPointPolicy'])
