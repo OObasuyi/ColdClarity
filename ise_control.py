@@ -68,7 +68,7 @@ class ISE:
             if 'CSRF' in response.text:
                 token_info = response.text.split(':')
                 self.csrf_token = {token_info[0]: token_info[1]}
-
+ 
         if self.login_type == 'login':
             url_login = f"https://{self.ip}/admin/LoginAction.do"
             login_payload = f"username={self.user}" \
@@ -83,23 +83,23 @@ class ISE:
                             f"&CSRFTokenNameValue={token_info[0]}%{token_info[1]}" \
                             f"&OWASP_CSRFTOKEN={token_info[1]}" \
                             f"&locale=en&" \
-                            f"hasSelectedLocale=false"
-
-            login_header = self.HEADER_DATA.copy()
-            login_header['Content-Type'] = 'application/x-www-form-urlencoded'
-            response = self.session.post(url_login, data=login_payload, headers=login_header, verify=False, allow_redirects=True)
-            if response.status_code == 200:
-                if 'lastLoginSuccess' in response.text:
-                    self.HEADER_DATA.update(self.csrf_token)
-                    self.logger.info('CSRF TOKEN Obtained')
-                    self.logger.info('Authentication Successful')
-                    return True
-            self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
-
+                            f"hasSelectedLocale=false"\
+                            f"&isPreLoginBannerAccepted=true"
         else:
+            url_login = f"https://{self.ip}/admin/"
+            login_payload = "preloginbanner=displayed"
             self.session.mount(f"https://{self.ip}", Pkcs12Adapter(pkcs12_filename=self.cert_location, pkcs12_password=self.cert_passwd))
-            self.HEADER_DATA.update(self.csrf_token)
-            self.logger.info('CSRF TOKEN Obtained')
+
+        login_header = self.HEADER_DATA.copy()
+        login_header['Content-Type'] = 'application/x-www-form-urlencoded'
+        response = self.session.post(url_login, data=login_payload, headers=login_header, verify=False, allow_redirects=True)
+        if response.status_code == 200:
+            if 'lastLoginSuccess' in response.text:
+                self.HEADER_DATA.update(self.csrf_token)
+                self.logger.info('CSRF TOKEN Obtained')
+                self.logger.info('Authentication Successful')
+                return True
+        self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
 
     def get_all_endpoint_data(self):
         endpoints = []
