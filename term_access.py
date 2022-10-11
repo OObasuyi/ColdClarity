@@ -9,7 +9,7 @@ def term_access():
     parser = ArgumentParser(prog='coldClarity')
     cold_args = parser.add_argument_group(title='coldClarity Fields')
     cold_args.add_argument('--config_file', help='location of config file', default=path.join(top_dir, 'config.yaml'), type=str)
-    cold_args.add_argument('--test_count', help='FOR TESTING ONLY. choose a minimal amount of endpoints to test ', default=20, type=int)
+    cold_args.add_argument('--test_count', help='FOR TESTING ONLY. choose a minimal amount of endpoints to test ', default=0, type=int)
     cold_args.add_argument('--test_msg', help='FOR TESTING ONLY. send a test msg no attachment ', default=False, type=bool)
     args = parser.parse_args()
 
