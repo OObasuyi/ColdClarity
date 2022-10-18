@@ -28,7 +28,7 @@ class C2CReport:
         self.custom_profiles = self.ise.config.get('custom_profiles_match')
 
     def create_ise_endpoint_report(self, incl_report_type='ep_attributes'):
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_phase{self.ise.phase}_{self.timestr}.csv')
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.phase}_{self.timestr}.csv')
         # pull ep data
         self.ise.retrieve_endpoint_data()
         c2c_eps = self.ise.endpoints.copy()
