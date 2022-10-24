@@ -62,4 +62,4 @@ only_connected: True
 
 
 ComplytoConnect:
-  phase: 1
+  step: 1

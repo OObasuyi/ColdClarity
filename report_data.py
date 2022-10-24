@@ -28,7 +28,7 @@ class C2CReport:
         self.custom_profiles = self.ise.config.get('custom_profiles_match')
 
     def create_ise_endpoint_report(self, incl_report_type='ep_attributes'):
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.phase}_{self.timestr}.csv')
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
         self.ise.retrieve_endpoint_data()
         c2c_eps = self.ise.endpoints.copy()
@@ -53,9 +53,9 @@ class C2CReport:
             writer.writerow(['Owner: ' + self.ise.config['report']['owner']])
             writer.writerow(['Area of Operations: ' + self.ise.config['report']['area_of_operation']])
             writer.writerow([f'Deployment ID:{self.ise.sn}'])
-            writer.writerow([f'C2C-Step{self.ise.phase}-2.0-MER-Information'])
+            writer.writerow([f'C2C-Step{self.ise.step}-2.0-MER-Information'])
             # logical profile summary
-            writer.writerow([f'C2C-Step{self.ise.phase}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
+            writer.writerow([f'C2C-Step{self.ise.step}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
             for cat in self.c2c_summary_list:
                 logical_group = c2c_eps[c2c_eps['LogicalProfile'] == cat]
                 if not logical_group.empty:
@@ -63,7 +63,7 @@ class C2CReport:
                 else:
                     writer.writerow([cat, 0])
             # endpoint policy summary
-            writer.writerow([f'C2C-Step{self.ise.phase}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
+            writer.writerow([f'C2C-Step{self.ise.step}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
             grouped_eps = c2c_eps.groupby(by=['EndPointPolicy'])
             grouped_eps_names = list(grouped_eps.groups)
             for gp_name in grouped_eps_names:
@@ -78,7 +78,7 @@ class C2CReport:
     def create_ise_sw_hw_report(self, type_= 'software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
         import pandas as pd
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_phase{self.ise.phase}_{self.timestr}.csv')
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.step}_{self.timestr}.csv')
         if type_ == 'software':
             self.ise.logger.info('Collecting Endpoint software infomation from ISE')
             self.ise.get_endpoint_software_info()
