@@ -1,9 +1,9 @@
 from base64 import b64encode
 from gzip import open as gzopen
 from logging.handlers import TimedRotatingFileHandler
-from os import path, makedirs, rename, remove, replace
+from os import path, makedirs, rename, remove, replace,walk
 from urllib.parse import quote as url_quote
-
+from io import StringIO
 import yaml
 
 import logging
@@ -25,25 +25,22 @@ class Rutils:
         self.cfg = None
 
     @staticmethod
-    def create_file_path(folder: str, file_name: str):
-        TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv', 'log', 'yaml','pfx','pem']
+    def create_file_path(folder: str, file_name: str,parent_dir=None):
+        parent_dir = path.dirname(path.abspath(__file__)) if not parent_dir else parent_dir
+        file_path = path.join(parent_dir,folder)
 
-        input_ext = '.'.join(file_name.split(".")[1:])
-        if input_ext.lower() not in allowed_exts:
-            raise ValueError(f'please ensure you using one of the allowed file types you gave {input_ext}')
-
-        fName = f'{TOP_DIR}/{folder}/{file_name}'
-        if not path.exists(f'{TOP_DIR}/{folder}'):
-            makedirs(f'{TOP_DIR}/{folder}')
+        fName = f'{file_path}/{file_name}'
+        if not path.exists(f'{file_path}'):
+            makedirs(f'{file_path}')
 
         # move file to correct dir if needed
         if not path.exists(fName):
             try:
-                replace(f'{TOP_DIR}/{file_name}', fName)
+                replace(f'{parent_dir}/{file_name}', fName)
             except:
                 # file has yet to be created or not in top path
                 pass
+
         return fName
 
     @staticmethod
@@ -61,6 +58,18 @@ class Rutils:
                     return yaml.safe_load(stream)
                 except yaml.YAMLError as exc:
                     self_instance.logger.info(f'Error processing config file. Error recevied {exc}')
+
+    @staticmethod
+    def get_files_from_loc(fold_loc:str,files_to_look_for:list):
+        _, _, filenames = next(walk(fold_loc))
+        fnames = [names for names in filenames for filames in files_to_look_for if filames in names]
+        return fnames
+
+    @staticmethod
+    def df_to_string_buffer(df):
+        with StringIO() as buffer:
+            df.to_csv(buffer,index=False)
+            return buffer.getvalue()
 
 
 def log_collector(log_all=False):
