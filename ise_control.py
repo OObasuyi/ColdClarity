@@ -148,7 +148,11 @@ class ISE:
         self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
     def get_specific_metadata_from_endpoints(self, specific='LogicalProfile'):
-        self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+        try:
+            self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+        except:
+            self.endpoints[specific] = self.endpoints['CALLING_STATION_ID'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+
         self.endpoints.replace({None: 'unknown'}, inplace=True)
 
     def get_license_info(self):
@@ -197,6 +201,45 @@ class ISE:
         self.get_specific_metadata_from_endpoints()
         self.logger.info('Endpoint data collection complete')
 
+
+    def special_reporting_data(self):
+        special_rep = self.config['special_reporting']
+        reporting_location = special_rep.get('reporting_location')
+        find_files = special_rep.get('files_to_look_for')
+        filter_list = special_rep.get('filter_list')
+        special_items = special_rep.get('filter_specifics')
+        attr_to_look_for = special_rep.get('get_attribute_from_endpoint')
+        fnames = self.UTILS.get_files_from_loc(reporting_location,find_files)
+        # df holder
+        self.endpoints = pd.DataFrame([])
+        for f in fnames:
+            ep_df = pd.read_csv(f'{reporting_location}/{f}')
+            ep_df = self.filter_data(ep_df,filter_list,special_items)
+            self.endpoints = pd.concat([self.endpoints,ep_df],ignore_index=True)
+            self.UTILS.create_file_path('archive',f,parent_dir=reporting_location)
+        self.get_specific_metadata_from_endpoints(attr_to_look_for)
+        self.logger.info('Endpoint special data collection complete')
+        
+
+    def filter_data(self,raw_df:pd.DataFrame,filter_list:list,data_matching:dict=None):
+        raw_df.drop(columns=filter_list,inplace=True)
+        # if we have specifics we want to match on
+        if data_matching:
+            for k,v in data_matching.items():
+                # try to see if we fit a usecase if not keep going
+                try:
+                    raw_df = raw_df[raw_df[k].astype(int) > v]
+                    continue
+                except Exception as error:
+                    self.logger.debug(error)
+
+                try:
+                    raw_df = raw_df[raw_df[k].str.contains(v)]
+                    continue
+                except Exception as error:
+                    self.logger.debug(error)
+        return raw_df
+    
 
 if __name__ == '__main__':
     ise = ISE()
