@@ -1,14 +1,12 @@
 from argparse import ArgumentParser
-from os import path
 
 from report_data import C2CReport
 
 
 def term_access():
-    top_dir = path.dirname(path.abspath(__file__))
     parser = ArgumentParser(prog='coldClarity')
     cold_args = parser.add_argument_group(title='coldClarity Fields')
-    cold_args.add_argument('--config_file', help='location of config file', default=path.join(top_dir, 'config.yaml'), type=str)
+    cold_args.add_argument('--config_file', help='location of config file', default= 'config.yaml', type=str)
     cold_args.add_argument('--test_count', help='FOR TESTING ONLY. choose a minimal amount of endpoints to test ', default=0, type=int)
     cold_args.add_argument('--test_msg', help='FOR TESTING ONLY. send a test msg no attachment ', default=False, type=bool)
     args = parser.parse_args()

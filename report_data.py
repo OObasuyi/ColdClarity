@@ -2,7 +2,7 @@ import csv
 import time
 from json import loads
 from os import path
-
+import pandas as pd
 from tqdm import tqdm
 
 from ise_control import ISE
@@ -81,10 +81,10 @@ class C2CReport:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
 
-    def create_ise_sw_hw_report(self, type_= 'software', hw_mac_list: list = None):
+    def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
-        import pandas as pd
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.phase}_{self.timestr}.csv')
+        vis = None
         if type_ == 'software':
             self.ise.logger.info('Collecting Endpoint software infomation from ISE')
             self.ise.get_endpoint_software_info()
@@ -105,7 +105,8 @@ class C2CReport:
                         hw_count += 1
                         for hwa in hw_catalog:
                             hw_attr_list.append(hwa)
-                    except:
+                    except Exception as error:
+                        self.ise.logger.debug(f'CHWR: {error}')
                         pass
                 hw_attr_list = [dict(t) for t in {tuple(d.items()) for d in l}]
                 if len(hw_attr_list) < 1:
@@ -121,14 +122,12 @@ class C2CReport:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
 
-
     def create_special_reporting(self):
         self.ise.special_reporting_data()
         # send email
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
-            messager.send_message(msg_attac_loc_or_buf=self.ise.endpoints,attachment_name=self.ise.config['special_reporting']['name_of_file_to_send'])
-
+            messager.send_message(msg_attac_loc_or_buf=self.ise.endpoints, attachment_name=self.ise.config['special_reporting']['name_of_file_to_send'])
 
 
 if __name__ == '__main__':

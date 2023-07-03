@@ -34,15 +34,15 @@ class ISE:
                 ise_password = input("password: ")
 
             # encode cred str to pass as a post msg to ISE
-            self.user = self.UTILS.encode_data(ise_username,base64=False)
-            self.password = self.UTILS.encode_data(ise_password,base64=False)
+            self.user = self.UTILS.encode_data(ise_username, base64=False)
+            self.password = self.UTILS.encode_data(ise_password, base64=False)
             self.auth_source = self.config['authentication']['text_based']['auth_source']
         # cert based
         elif self.config['authentication']['cert_based']['use']:
             self.login_type = 'cert'
             cert_location = self.config['authentication']['cert_based']['cert_pfx_location']
             # move cert to new folder
-            self.cert_location = self.UTILS.create_file_path('certificate_information',cert_location)
+            self.cert_location = self.UTILS.create_file_path('certificate_information', cert_location)
             self.cert_passwd = self.config['authentication']['cert_based']['cert_password']
 
         # auth information
@@ -63,13 +63,17 @@ class ISE:
         token_info = None
         csrf_header = self.HEADER_DATA.copy()
         csrf_header['FETCH-CSRF-TOKEN'] = '1'
+        # Needed FOR USER/PASS AUTH
+        if self.login_type == 'text':
+            self.session.get(f'https://{self.ip}/admin/',headers=csrf_header)
+
         response = self.session.post(url_csrf, headers=csrf_header, data={})
         if response.status_code == 200:
             if 'CSRF' in response.text:
                 token_info = response.text.split(':')
                 self.csrf_token = {token_info[0]: token_info[1]}
- 
-        if self.login_type == 'login':
+
+        if self.login_type == 'text':
             url_login = f"https://{self.ip}/admin/LoginAction.do"
             login_payload = f"username={self.user}" \
                             f"&password={self.password}" \
@@ -80,17 +84,18 @@ class ISE:
                             f"&authType={self.auth_source}" \
                             f"&newPassword=" \
                             f"&destinationURL=" \
-                            f"&CSRFTokenNameValue={token_info[0]}%{token_info[1]}" \
+                            f"&CSRFTokenNameValue={token_info[0]}%3D{token_info[1]}" \
                             f"&OWASP_CSRFTOKEN={token_info[1]}" \
                             f"&locale=en&" \
-                            f"hasSelectedLocale=false"\
-                            f"&isPreLoginBannerAccepted=true"
+                            f"hasSelectedLocale=false" \
+                            # f"&isPreLoginBannerAccepted=true"
         else:
             url_login = f"https://{self.ip}/admin/"
             login_payload = "preloginbanner=displayed"
             self.session.mount(f"https://{self.ip}", Pkcs12Adapter(pkcs12_filename=self.cert_location, pkcs12_password=self.cert_passwd))
 
         login_header = self.HEADER_DATA.copy()
+        login_header['Referer'] = 'https://10.11.6.10/admin/'
         login_header['Content-Type'] = 'application/x-www-form-urlencoded'
         response = self.session.post(url_login, data=login_payload, headers=login_header, verify=False, allow_redirects=True)
         if response.status_code == 200:
@@ -100,6 +105,7 @@ class ISE:
                 self.logger.info('Authentication Successful')
                 return True
         self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
+        quit()
 
     def get_all_endpoint_data(self):
         endpoints = []
@@ -201,7 +207,6 @@ class ISE:
         self.get_specific_metadata_from_endpoints()
         self.logger.info('Endpoint data collection complete')
 
-
     def special_reporting_data(self):
         special_rep = self.config['special_reporting']
         reporting_location = special_rep.get('reporting_location')
@@ -209,23 +214,22 @@ class ISE:
         filter_list = special_rep.get('filter_list')
         special_items = special_rep.get('filter_specifics')
         attr_to_look_for = special_rep.get('get_attribute_from_endpoint')
-        fnames = self.UTILS.get_files_from_loc(reporting_location,find_files)
+        fnames = self.UTILS.get_files_from_loc(reporting_location, find_files)
         # df holder
         self.endpoints = pd.DataFrame([])
         for f in fnames:
             ep_df = pd.read_csv(f'{reporting_location}/{f}')
-            ep_df = self.filter_data(ep_df,filter_list,special_items)
-            self.endpoints = pd.concat([self.endpoints,ep_df],ignore_index=True)
-            self.UTILS.create_file_path('archive',f,parent_dir=reporting_location)
+            ep_df = self.filter_data(ep_df, filter_list, special_items)
+            self.endpoints = pd.concat([self.endpoints, ep_df], ignore_index=True)
+            self.UTILS.create_file_path('archive', f, parent_dir=reporting_location)
         self.get_specific_metadata_from_endpoints(attr_to_look_for)
         self.logger.info('Endpoint special data collection complete')
-        
 
-    def filter_data(self,raw_df:pd.DataFrame,filter_list:list,data_matching:dict=None):
-        raw_df.drop(columns=filter_list,inplace=True)
+    def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
+        raw_df.drop(columns=filter_list, inplace=True)
         # if we have specifics we want to match on
         if data_matching:
-            for k,v in data_matching.items():
+            for k, v in data_matching.items():
                 # try to see if we fit a usecase if not keep going
                 try:
                     raw_df = raw_df[raw_df[k].astype(int) > v]
@@ -239,7 +243,7 @@ class ISE:
                 except Exception as error:
                     self.logger.debug(error)
         return raw_df
-    
+
 
 if __name__ == '__main__':
     ise = ISE()
