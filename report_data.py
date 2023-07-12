@@ -61,25 +61,67 @@ class C2CReport:
             writer.writerow([f'Deployment ID:{self.ise.sn}'])
             writer.writerow([f'C2C-Step{self.ise.phase}-2.0-MER-Information'])
             # logical profile summary
-            writer.writerow([f'C2C-Step{self.ise.phase}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
-            for cat in self.c2c_summary_list:
-                logical_group = c2c_eps[c2c_eps['LogicalProfile'] == cat]
-                if not logical_group.empty:
-                    writer.writerow([cat, logical_group.shape[0]])
-                else:
-                    writer.writerow([cat, 0])
-            # endpoint policy summary
-            writer.writerow([f'C2C-Step{self.ise.phase}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
-            grouped_eps = c2c_eps.groupby(by=['EndPointPolicy'])
-            grouped_eps_names = list(grouped_eps.groups)
-            for gp_name in grouped_eps_names:
-                writer.writerow([gp_name, grouped_eps.get_group(gp_name).shape[0]])
+            if self.ise.config['ComplytoConnect']['phase'] == 1:
+                self.c2c_step_1(writer,c2c_eps)
+            elif self.ise.config['ComplytoConnect']['phase'] == 2:
+                self.c2c_step_2(writer,c2c_eps)
+
             self.ise.logger.info(f'Report Done!. Save file at: {fname}')
 
         # send email
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
+
+    def c2c_step_1(self,writer,c2c_eps):
+        writer.writerow([f'C2C-Step{self.ise.phase}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
+        for cat in self.c2c_summary_list:
+            logical_group = c2c_eps[c2c_eps['LogicalProfile'] == cat]
+            if not logical_group.empty:
+                writer.writerow([cat, logical_group.shape[0]])
+            else:
+                writer.writerow([cat, 0])
+        # endpoint policy summary
+        writer.writerow([f'C2C-Step{self.ise.phase}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
+        grouped_eps = c2c_eps.groupby(by=['EndPointPolicy'])
+        grouped_eps_names = list(grouped_eps.groups)
+        for gp_name in grouped_eps_names:
+            writer.writerow([gp_name, grouped_eps.get_group(gp_name).shape[0]])
+
+    def c2c_step_2(self,writer,c2c):
+        # NOT NEEDED
+        totals_attr = ['Total Discovered Endpoints', 'Total Manageable Endpoints', 'Total Managed Endpoints', 'Total Non-Managed Endpoints', 'Total 802.1X Endpoints', 'Total MAB Endpoints', 'Total Profiled Endpoints', 'Total Authenticated Other (SNMP etc)']
+        non_svr_attr = ['Non-Svr/Wkstn Managed Devices', 'Non-Svr/Wkstn Non-Managed Devices']
+        wrkst_attr = ['Total Workstations and Servers', 'Unmanaged Workstations and Servers', 'Managed Workstations and Servers']
+        req_attr = ['Anti-Malware Complaint','Anti-Malware Non-Complaint', 'Patching Agent Complaint (SCCM Status/BigFix etc)','Patching Agent Non-Complaint','Host Firewall Compliant', 'Host Firewall Non-Compliant','Disk Encryption Non-Compliant', 'Disk Encryption Compliant']
+        ep_uid_attr = ['Ownorg Tagged','Operational Authorization Tagged','Serial Number Collected']
+        # NOT NEEDED
+
+        # total active endpoints
+        writer.writerow(['Total Discovered Endpoints', self.ise.endpoints.shape[0]])
+        # devices that can posture
+        writer.writerow(['Total Managed Endpoints', self.ise.endpoints[self.ise.endpoints["DeviceCompliance"].str.lower() != 'unknown'].shape[0]])
+        # device that cant  posture
+        writer.writerow(['Total Non-Managed Endpoints', self.ise.endpoints[self.ise.endpoints["DeviceCompliance"].str.lower() == 'unknown'].shape[0]])
+        # devices that can auth via 8021.x
+        writer.writerow(['Total 802.1X Endpoints', self.ise.endpoints[self.ise.endpoints["AuthenticationMethod"].str.lower().isin(['x509_pki'])].shape[0]])
+        # devices that are MAB
+        writer.writerow(['Total MAB Endpoints', self.ise.endpoints[self.ise.endpoints["AuthenticationMethod"].str.lower() == 'lookup'].shape[0]])
+        # how many profiles we have
+        writer.writerow(['Total Profiled Endpoints', self.ise.endpoints[self.ise.endpoints["EndPointPolicy"].str.lower() != 'unknown'].shape[0]])
+        # if we are doing webauth or some type of auth???
+        writer.writerow(['Total Authenticated Other (SNMP etc)', self.ise.endpoints[~self.ise.endpoints["AuthenticationMethod"].str.lower().isin(['unknown','lookup','x509_pki'])].shape[0]])
+
+        # only get user endpoints
+        non_svr_ep = self.ise.endpoints[~self.ise.endpoints['AD-Operating-System'].str.lower().str.contains('windows server | red hat | rhel', regex=True)]
+        # how many user endpoints are reporting posture
+        writer.writerow(['Non-Svr/Wkstn Managed Devices', non_svr_ep[non_svr_ep["DeviceCompliance"].str.lower() != 'unknown'].shape[0]])
+        # how many are not
+        writer.writerow(['Non-Svr/Wkstn Non-Managed Devices', non_svr_ep[non_svr_ep["DeviceCompliance"].str.lower() == 'unknown'].shape[0]])
+
+
+
+
 
     def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
@@ -108,7 +150,8 @@ class C2CReport:
                     except Exception as error:
                         self.ise.logger.debug(f'CHWR: {error}')
                         pass
-                hw_attr_list = [dict(t) for t in {tuple(d.items()) for d in l}]
+                # DONT KNOW WHAT THE FUCK IS THAT
+                # hw_attr_list = [dict(t) for t in {tuple(d.items()) for d in l}]
                 if len(hw_attr_list) < 1:
                     self.ise.logger.error(f'No {type_} Data to Report')
                     return
@@ -121,6 +164,7 @@ class C2CReport:
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
+
 
     def create_special_reporting(self):
         self.ise.special_reporting_data()
