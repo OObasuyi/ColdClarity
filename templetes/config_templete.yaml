@@ -57,6 +57,18 @@ endpoint_buckets_match:
   - 'test'
   - 'unknown'
 
+# if your doing step 2 you will need this to match the posture policy creating in ISE, enter the ISE created policy the right (the key value)
+step2_conditions_match:
+  - anti_mw: example_anti_malware_policy_name
+  - patching: example_patching_policy_name
+  - fw: example_anti_fw_policy_name
+  - encrypt: example_disk_encrypt_policy_name
+
+# if more col are needed in the report post them here the key value (item to the left) will be a column in the report, while the value with the amount
+step2_conditions_custom:
+  - usb: example_custom_policy_name
+
+
 # if you need a custom report thats already sitting in the repository server
 special_reporting:
   use: False

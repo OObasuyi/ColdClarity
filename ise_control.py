@@ -65,7 +65,7 @@ class ISE:
         csrf_header['FETCH-CSRF-TOKEN'] = '1'
         # Needed FOR USER/PASS AUTH
         if self.login_type == 'text':
-            self.session.get(f'https://{self.ip}/admin/',headers=csrf_header)
+            self.session.get(f'https://{self.ip}/admin/', headers=csrf_header)
 
         response = self.session.post(url_csrf, headers=csrf_header, data={})
         if response.status_code == 200:
@@ -88,7 +88,7 @@ class ISE:
                             f"&OWASP_CSRFTOKEN={token_info[1]}" \
                             f"&locale=en&" \
                             f"hasSelectedLocale=false" \
-                            # f"&isPreLoginBannerAccepted=true"
+                # f"&isPreLoginBannerAccepted=true"
         else:
             url_login = f"https://{self.ip}/admin/"
             login_payload = "preloginbanner=displayed"
@@ -153,11 +153,23 @@ class ISE:
             return ep_info
         self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
-    def get_specific_metadata_from_endpoints(self, specific='LogicalProfile'):
+    def get_metadata_from_endpoints(self, specific: str = False):
         try:
-            self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+            if specific:
+                self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+            else:
+                # gather macs and get all attr from them
+                ep_name = self.endpoints['MACAddress'].to_list()
+                ep_data = [self.get_endpoint_data(i) for i in ep_name]
+                self.endpoints = pd.DataFrame(ep_data)
         except:
-            self.endpoints[specific] = self.endpoints['CALLING_STATION_ID'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+            if specific:
+                self.endpoints[specific] = self.endpoints['Calling-Station-ID'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+            else:
+                # gather macs and get all attr from them
+                ep_name = self.endpoints['Calling-Station-ID'].to_list()
+                ep_data = [self.get_endpoint_data(i) for i in ep_name]
+                self.endpoints = pd.DataFrame(ep_data)
 
         self.endpoints.replace({None: 'unknown'}, inplace=True)
 
@@ -196,7 +208,14 @@ class ISE:
         header = self.HEADER_DATA.copy()
         header['_QPH_'] = host_hw
         url = f"https://{self.ip}/admin/rs/uiapi/hwvisibility"
-        return self.session.get(url, headers=header)
+        response = self.session.get(url, headers=header)
+        # todo will break reporting implementation of it and not the HW info we need, need use the other more generall HW info
+        if response.status_code == 200:
+            hw_data = response.json()
+            hw_data = pd.DataFrame(hw_data).drop_duplicates()
+            hw_data['Mac Address'] = mac_address
+            return hw_data.to_dict()
+        self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
     def retrieve_endpoint_data(self):
         # deployment ID
@@ -204,8 +223,23 @@ class ISE:
         self.endpoint_policies = None
         self.logger.info('Collecting endpoint data, depending on size of database this can take some time')
         self.get_all_endpoint_data()
-        self.get_specific_metadata_from_endpoints()
+
+        # since we dont need that much info in step 1 just pull the logical profile else pull all data
+        if self.config['ComplytoConnect']['phase'] == 1:
+            self.get_metadata_from_endpoints(specific='LogicalProfile')
+        elif self.config['ComplytoConnect']['phase'] == 2:
+            self.get_metadata_from_endpoints()
+            # need to get hardware serials also
+            self.join_hw_data()
         self.logger.info('Endpoint data collection complete')
+
+    def join_hw_data(self):
+        ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
+        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':')) for i in ep_name]
+        hw_data = pd.DataFrame(hw_data)
+        hw_data.rename(columns={'Mac Address':'Calling-Station-ID'},inplace=True)
+        self.endpoints = pd.merge(self.endpoints, hw_data, on='Calling-Station-ID')
+
 
     def special_reporting_data(self):
         special_rep = self.config['special_reporting']
@@ -222,7 +256,7 @@ class ISE:
             ep_df = self.filter_data(ep_df, filter_list, special_items)
             self.endpoints = pd.concat([self.endpoints, ep_df], ignore_index=True)
             self.UTILS.create_file_path('archive', f, parent_dir=reporting_location)
-        self.get_specific_metadata_from_endpoints(attr_to_look_for)
+        self.get_metadata_from_endpoints(attr_to_look_for)
         self.logger.info('Endpoint special data collection complete')
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):

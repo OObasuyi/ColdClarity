@@ -10,6 +10,7 @@ from messaging import Messaging
 from test_control import ISETest, MessagingTest
 from utilities import Rutils
 
+pd.options.mode.chained_assignment = None
 
 class C2CReport:
     def __init__(self, config_file='config.yaml', test: int = 0, test_msg=False):
@@ -62,9 +63,9 @@ class C2CReport:
             writer.writerow([f'C2C-Step{self.ise.phase}-2.0-MER-Information'])
             # logical profile summary
             if self.ise.config['ComplytoConnect']['phase'] == 1:
-                self.c2c_step_1(writer,c2c_eps)
+                self.c2c_step_1(writer, c2c_eps)
             elif self.ise.config['ComplytoConnect']['phase'] == 2:
-                self.c2c_step_2(writer,c2c_eps)
+                self.c2c_step_2(writer, c2c_eps)
 
             self.ise.logger.info(f'Report Done!. Save file at: {fname}')
 
@@ -73,7 +74,7 @@ class C2CReport:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
 
-    def c2c_step_1(self,writer,c2c_eps):
+    def c2c_step_1(self, writer, c2c_eps):
         writer.writerow([f'C2C-Step{self.ise.phase}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
         for cat in self.c2c_summary_list:
             logical_group = c2c_eps[c2c_eps['LogicalProfile'] == cat]
@@ -88,40 +89,99 @@ class C2CReport:
         for gp_name in grouped_eps_names:
             writer.writerow([gp_name, grouped_eps.get_group(gp_name).shape[0]])
 
-    def c2c_step_2(self,writer,c2c):
+    def c2c_step_2(self, writer, c2c):
         # NOT NEEDED
         totals_attr = ['Total Discovered Endpoints', 'Total Manageable Endpoints', 'Total Managed Endpoints', 'Total Non-Managed Endpoints', 'Total 802.1X Endpoints', 'Total MAB Endpoints', 'Total Profiled Endpoints', 'Total Authenticated Other (SNMP etc)']
         non_svr_attr = ['Non-Svr/Wkstn Managed Devices', 'Non-Svr/Wkstn Non-Managed Devices']
         wrkst_attr = ['Total Workstations and Servers', 'Unmanaged Workstations and Servers', 'Managed Workstations and Servers']
-        req_attr = ['Anti-Malware Complaint','Anti-Malware Non-Complaint', 'Patching Agent Complaint (SCCM Status/BigFix etc)','Patching Agent Non-Complaint','Host Firewall Compliant', 'Host Firewall Non-Compliant','Disk Encryption Non-Compliant', 'Disk Encryption Compliant']
-        ep_uid_attr = ['Ownorg Tagged','Operational Authorization Tagged','Serial Number Collected']
+        req_attr = ['Anti-Malware Complaint', 'Anti-Malware Non-Complaint', 'Patching Agent Complaint (SCCM Status/BigFix etc)', 'Patching Agent Non-Complaint', 'Host Firewall Compliant', 'Host Firewall Non-Compliant', 'Disk Encryption Non-Compliant', 'Disk Encryption Compliant']
+        ep_uid_attr = ['Ownorg Tagged', 'Operational Authorization Tagged', 'Serial Number Collected']
         # NOT NEEDED
 
+        # get Posture conditions
+        posture_cons = self.ise.config['step2_conditions_match']
+        # check if it exist if so join it to origin
+        extended_pos_cons = self.ise.config.get('step2_conditions_custom')
+        if extended_pos_cons:
+            posture_cons = posture_cons + extended_pos_cons
+
+        # normalize df
+        step2_data = self.ise.endpoints.copy()
+        step2_data.columns = step2_data.columns.str.lower()
+        step2_data = step2_data.apply(lambda x: x.astype(str).str.lower())
+
         # total active endpoints
-        writer.writerow(['Total Discovered Endpoints', self.ise.endpoints.shape[0]])
+        writer.writerow(['Total Discovered Endpoints', step2_data.shape[0]])
         # devices that can posture
-        writer.writerow(['Total Managed Endpoints', self.ise.endpoints[self.ise.endpoints["DeviceCompliance"].str.lower() != 'unknown'].shape[0]])
+        writer.writerow(['Total Managed Endpoints', step2_data[step2_data["devicecompliance"] != 'unknown'].shape[0]])
         # device that cant  posture
-        writer.writerow(['Total Non-Managed Endpoints', self.ise.endpoints[self.ise.endpoints["DeviceCompliance"].str.lower() == 'unknown'].shape[0]])
+        writer.writerow(['Total Non-Managed Endpoints', step2_data[step2_data["devicecompliance"] == 'unknown'].shape[0]])
         # devices that can auth via 8021.x
-        writer.writerow(['Total 802.1X Endpoints', self.ise.endpoints[self.ise.endpoints["AuthenticationMethod"].str.lower().isin(['x509_pki'])].shape[0]])
+        writer.writerow(['Total 802.1X Endpoints', step2_data[step2_data["authenticationmethod"].isin(['x509_pki'])].shape[0]])
         # devices that are MAB
-        writer.writerow(['Total MAB Endpoints', self.ise.endpoints[self.ise.endpoints["AuthenticationMethod"].str.lower() == 'lookup'].shape[0]])
+        writer.writerow(['Total MAB Endpoints', step2_data[step2_data["authenticationmethod"] == 'lookup'].shape[0]])
         # how many profiles we have
-        writer.writerow(['Total Profiled Endpoints', self.ise.endpoints[self.ise.endpoints["EndPointPolicy"].str.lower() != 'unknown'].shape[0]])
+        writer.writerow(['Total Profiled Endpoints', step2_data[step2_data["endpointpolicy"] != 'unknown'].shape[0]])
         # if we are doing webauth or some type of auth???
-        writer.writerow(['Total Authenticated Other (SNMP etc)', self.ise.endpoints[~self.ise.endpoints["AuthenticationMethod"].str.lower().isin(['unknown','lookup','x509_pki'])].shape[0]])
+        writer.writerow(['Total Authenticated Other (SNMP etc)', step2_data[~step2_data["authenticationmethod"].isin(['unknown', 'lookup', 'x509_pki'])].shape[0]])
+
+        # reporting Break
+        writer.writerow([])
 
         # only get user endpoints
-        non_svr_ep = self.ise.endpoints[~self.ise.endpoints['AD-Operating-System'].str.lower().str.contains('windows server | red hat | rhel', regex=True)]
+        non_svr_ep = step2_data[~step2_data['ad-operating-system'].str.contains('windows server | red hat | rhel', regex=True)]
         # how many user endpoints are reporting posture
-        writer.writerow(['Non-Svr/Wkstn Managed Devices', non_svr_ep[non_svr_ep["DeviceCompliance"].str.lower() != 'unknown'].shape[0]])
+        writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_ep[non_svr_ep["devicecompliance"] != 'unknown'].shape[0]])
         # how many are not
-        writer.writerow(['Non-Svr/Wkstn Non-Managed Devices', non_svr_ep[non_svr_ep["DeviceCompliance"].str.lower() == 'unknown'].shape[0]])
+        writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_svr_ep[non_svr_ep["devicecompliance"] == 'unknown'].shape[0]])
+
+        # reporting Break
+        writer.writerow([])
+
+        # just all logically profiled Workstation and Servers
+        wrk_svr_data = step2_data[step2_data['logicalprofile'] == 'workstations and servers']
+        writer.writerow(['Total Workstations and Servers', wrk_svr_data.shape[0]])
+        # wrk/svrs not/are in posture
+        writer.writerow(['Unmanaged Workstations and Servers', wrk_svr_data[wrk_svr_data["devicecompliance"] == 'unknown'].shape[0]])
+        writer.writerow(['Managed Workstations and Servers', wrk_svr_data[wrk_svr_data["devicecompliance"] != 'unknown'].shape[0]])
+
+        # reporting Break
+        writer.writerow([])
+
+        # Posture compliance
+        pos_stat = step2_data[step2_data["devicecompliance"] != 'unknown']
+        # get posture status by condition
+        for match_conditions in posture_cons:
+            for k,v in match_conditions.items():
+                k,v = k.lower(), v.lower()
+                pos_stat[f'{k}_hits'] = pos_stat['posturereport'].apply(lambda x: self.posture_report_spliter(x, v))
+
+        # get all k values from matched conditions for slotting
+        matched_keys = [k for match_conditions in posture_cons for k in match_conditions.keys()]
+        # write the total hits per condition
+        for mk in matched_keys:
+            writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
+            writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
+
+        # reporting Break
+        writer.writerow([])
+
+        # collect bios serials and sum
 
 
 
 
+    @staticmethod
+    def posture_report_spliter(x, get_policy):
+        # split by the conditions matched
+        posture_report = x.split(',')
+        # now split from con name to pass/fail
+        for i in posture_report:
+            # check if we have a policy match
+            if f'{get_policy}\\' in i:
+                # parse and return whether this device passed if not return not_applicable
+                return i.split(';')[1].strip('\\')
+        return 'not_applicable'
 
     def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
@@ -164,7 +224,6 @@ class C2CReport:
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
-
 
     def create_special_reporting(self):
         self.ise.special_reporting_data()
