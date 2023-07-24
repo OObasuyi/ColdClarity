@@ -12,6 +12,7 @@ from utilities import Rutils
 
 pd.options.mode.chained_assignment = None
 
+
 class C2CReport:
     def __init__(self, config_file='config.yaml', test: int = 0, test_msg=False):
         self.timestr = time.strftime("%d%b%Y")
@@ -90,14 +91,6 @@ class C2CReport:
             writer.writerow([gp_name, grouped_eps.get_group(gp_name).shape[0]])
 
     def c2c_step_2(self, writer, c2c):
-        # NOT NEEDED
-        totals_attr = ['Total Discovered Endpoints', 'Total Manageable Endpoints', 'Total Managed Endpoints', 'Total Non-Managed Endpoints', 'Total 802.1X Endpoints', 'Total MAB Endpoints', 'Total Profiled Endpoints', 'Total Authenticated Other (SNMP etc)']
-        non_svr_attr = ['Non-Svr/Wkstn Managed Devices', 'Non-Svr/Wkstn Non-Managed Devices']
-        wrkst_attr = ['Total Workstations and Servers', 'Unmanaged Workstations and Servers', 'Managed Workstations and Servers']
-        req_attr = ['Anti-Malware Complaint', 'Anti-Malware Non-Complaint', 'Patching Agent Complaint (SCCM Status/BigFix etc)', 'Patching Agent Non-Complaint', 'Host Firewall Compliant', 'Host Firewall Non-Compliant', 'Disk Encryption Non-Compliant', 'Disk Encryption Compliant']
-        ep_uid_attr = ['Ownorg Tagged', 'Operational Authorization Tagged', 'Serial Number Collected']
-        # NOT NEEDED
-
         # get Posture conditions
         posture_cons = self.ise.config['step2_conditions_match']
         # check if it exist if so join it to origin
@@ -152,8 +145,8 @@ class C2CReport:
         pos_stat = step2_data[step2_data["devicecompliance"] != 'unknown']
         # get posture status by condition
         for match_conditions in posture_cons:
-            for k,v in match_conditions.items():
-                k,v = k.lower(), v.lower()
+            for k, v in match_conditions.items():
+                k, v = k.lower(), v.lower()
                 pos_stat[f'{k}_hits'] = pos_stat['posturereport'].apply(lambda x: self.posture_report_spliter(x, v))
 
         # get all k values from matched conditions for slotting
@@ -163,10 +156,8 @@ class C2CReport:
             writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
             writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
 
-
         # collect bios serials and sum
         writer.writerow(['Serial Number Collected', step2_data[step2_data['serialnum'] != 'unknown'].shape[0]])
-
 
     @staticmethod
     def posture_report_spliter(x, get_policy):
