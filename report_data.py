@@ -163,12 +163,9 @@ class C2CReport:
             writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
             writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
 
-        # reporting Break
-        writer.writerow([])
 
         # collect bios serials and sum
-
-
+        writer.writerow(['Serial Number Collected', step2_data[step2_data['serialnum'] != 'unknown'].shape[0]])
 
 
     @staticmethod

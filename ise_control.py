@@ -198,23 +198,33 @@ class ISE:
         url = f"https://{self.ip}/admin/rs/uiapi/visibility"
         self.sw_catalog = self.session.get(url, headers=headers)
 
-    def get_endpoint_hardware_info(self, mac_address):
-        # can only get data one at a time per mac
-        # hardware data
-        host_hw = f'columns=NoOfDevicesPerHw%2CMACAddress&sortBy=name&MACAddress={mac_address}&startAt=1&pageSize=10000'
+    def get_endpoint_hardware_info(self, mac_address, high_level=False):
+        url = f"https://{self.ip}/admin/rs/uiapi/hwvisibility"
+        if not high_level:
+            # can only get data one at a time per mac
+            header_data = f'columns=NoOfDevicesPerHw%2CMACAddress&sortBy=name&MACAddress={mac_address}&startAt=1&pageSize=10000'
+        else:
+            header_data = 'pageType=hw&' \
+                          'columns=MACAddress,manufacture,serialNum,noOfAttachments,cpuUsage,memoryUsage,hdUsage,NAS-Port-Id,status,NetworkDeviceName,PhoneID,ip&' \
+                          'sortBy=MACAddress&' \
+                          'startAt=1&' \
+                          'pageSize=10&' \
+                          'total_pages=1&' \
+                          'total_entries=1'
+
         # transform to base64 then into the str representation of it
-        host_hw = base64.b64encode(str.encode(host_hw)).decode('utf-8')
+        header_data = base64.b64encode(str.encode(header_data)).decode('utf-8')
         # session cookie are persistence so only need to add this header that was implemented from the JS caller
         header = self.HEADER_DATA.copy()
-        header['_QPH_'] = host_hw
-        url = f"https://{self.ip}/admin/rs/uiapi/hwvisibility"
+        header['_QPH_'] = header_data
         response = self.session.get(url, headers=header)
-        # todo will break reporting implementation of it and not the HW info we need, need use the other more generall HW info
+        # so we dont break compability with old caller in report_data
+        if not high_level:
+            return response
+
         if response.status_code == 200:
-            hw_data = response.json()
-            hw_data = pd.DataFrame(hw_data).drop_duplicates()
-            hw_data['Mac Address'] = mac_address
-            return hw_data.to_dict()
+            hw_data = json.loads(response.json()[0])
+            return hw_data
         self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
     def retrieve_endpoint_data(self):
@@ -231,15 +241,19 @@ class ISE:
             self.get_metadata_from_endpoints()
             # need to get hardware serials also
             self.join_hw_data()
+
         self.logger.info('Endpoint data collection complete')
 
     def join_hw_data(self):
         ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
-        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':')) for i in ep_name]
+        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
         hw_data = pd.DataFrame(hw_data)
-        hw_data.rename(columns={'Mac Address':'Calling-Station-ID'},inplace=True)
-        self.endpoints = pd.merge(self.endpoints, hw_data, on='Calling-Station-ID')
+        # conform hw data to match self endpoints so we can merge them
+        hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
+        hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
 
+        self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
+        self.endpoints.replace({None: 'unknown'}, inplace=True)
 
     def special_reporting_data(self):
         special_rep = self.config['special_reporting']
