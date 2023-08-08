@@ -29,7 +29,7 @@ class C2CReport:
         self.c2c_summary_list = self.ise.config.get('endpoint_buckets_match')
         self.custom_profiles = self.ise.config.get('custom_profiles_match')
 
-    def create_ise_endpoint_report(self, incl_report_type='ep_attributes'):
+    def create_ise_endpoint_report(self, incl_report_type=None):
         # special reports
         if self.ise.config.get('special_reporting').get('use'):
             self.create_special_reporting()
