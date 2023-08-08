@@ -1,0 +1,16 @@
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = san_extensions
+prompt = no
+
+[req_distinguished_name]
+CN = YourCommonName
+
+[san_extensions]
+subjectAltName = @alt_names
+keyUsage = digitalSignature
+extendedKeyUsage = clientAuth, serverAuth
+
+[alt_names]
+DNS.1 = example.com
+

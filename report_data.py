@@ -68,7 +68,7 @@ class C2CReport:
             elif self.ise.config['ComplytoConnect']['phase'] == 2:
                 self.c2c_step_2(writer, c2c_eps)
 
-            self.ise.logger.info(f'Report Done!. Save file at: {fname}')
+            self.ise.logger.error(f'Report Done!. Save file at: {fname}')
 
         # send email
         if self.ise.config["report"]['send_email']:
@@ -207,7 +207,7 @@ class C2CReport:
                 vis['endpoint_count'] = hw_count
                 vis.drop(columns=['vendorId', 'productId'], inplace=True)
         vis.to_csv(fname, index=False)
-        self.ise.logger.info(f'Endpoint {type_} Report Done! Saved to: {fname}')
+        self.ise.logger.error(f'Endpoint {type_} Report Done! Saved to: {fname}')
         # send email
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
