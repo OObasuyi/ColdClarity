@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 from ise_control import ISE
 from messaging import Messaging
-from test_control import ISETest, MessagingTest
 from utilities import Rutils
 
 pd.options.mode.chained_assignment = None
@@ -19,12 +18,7 @@ class C2CReport:
         self.top_dir = path.dirname(path.abspath(__file__))
         self.utils = Rutils()
 
-        if test:
-            self.ise = ISETest(count_amt=test, config=config_file)
-            if test_msg:
-                MessagingTest(self.ise.config).send_message('test')
-        else:
-            self.ise = ISE(config=config_file)
+        self.ise = ISE(config=config_file)
 
         self.c2c_summary_list = self.ise.config.get('endpoint_buckets_match')
         self.custom_profiles = self.ise.config.get('custom_profiles_match')
@@ -68,7 +62,7 @@ class C2CReport:
             elif self.ise.config['ComplytoConnect']['phase'] == 2:
                 self.c2c_step_2(writer, c2c_eps)
 
-            self.ise.logger.error(f'Report Done!. Save file at: {fname}')
+            self.ise.logger.info(f'Report Done!. Save file at: {fname}')
 
         # send email
         if self.ise.config["report"]['send_email']:
@@ -176,12 +170,12 @@ class C2CReport:
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["Command_name"]}_step{self.ise.phase}_{self.timestr}.csv')
         vis = None
         if type_ == 'software':
-            self.ise.logger.info('Collecting Endpoint software infomation from ISE')
+            self.ise.logger.info('Collecting Endpoint software information from ISE')
             self.ise.get_endpoint_software_info()
             vis = pd.DataFrame(loads(self.ise.sw_catalog.text))
             vis.drop(columns=['id', 'productId'], inplace=True)
         else:
-            self.ise.logger.info('Collecting Endpoint hardware infomation from ISE')
+            self.ise.logger.info('Collecting Endpoint hardware information from ISE')
             hw_count = 0
             hw_attr_list = []
             if hw_mac_list is not None:
@@ -207,7 +201,7 @@ class C2CReport:
                 vis['endpoint_count'] = hw_count
                 vis.drop(columns=['vendorId', 'productId'], inplace=True)
         vis.to_csv(fname, index=False)
-        self.ise.logger.error(f'Endpoint {type_} Report Done! Saved to: {fname}')
+        self.ise.logger.info(f'Endpoint {type_} Report Done! Saved to: {fname}')
         # send email
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
@@ -223,6 +217,4 @@ class C2CReport:
 
 if __name__ == '__main__':
     c2r = C2CReport()
-    # c2r = C2CReport()
-    # c2r.create_ise_sw_hw_report('Hardware',['C0-3E-BA-99-3E-29'])
     c2r.create_ise_endpoint_report(incl_report_type='None')

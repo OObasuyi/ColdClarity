@@ -3,9 +3,11 @@ import json
 
 import pandas as pd
 import requests
+from tqdm import tqdm
 
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
+from os import getpid
 
 requests.packages.urllib3.disable_warnings()
 
@@ -22,6 +24,8 @@ class ISE:
         # move config file to new folder
         config = self.UTILS.create_file_path('Config_information', config)
         self.config = self.UTILS.get_yaml_config(config, self)
+        # not ideal but meh
+        self.logger = log_collector(self.config.get('debug_console_login'))
 
         # ISE username and password
         if self.config['authentication']['text_based']['use']:
@@ -101,11 +105,14 @@ class ISE:
         if response.status_code == 200:
             if 'lastLoginSuccess' in response.text:
                 self.HEADER_DATA.update(self.csrf_token)
-                self.logger.info('CSRF TOKEN Obtained')
+                self.logger.debug('CSRF TOKEN Obtained')
                 self.logger.info('Authentication Successful')
                 return True
         self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
         quit()
+
+    def logout_ise_session(self):
+        self.session.get(f'https://{self.ip}/admin/logout.jsp')
 
     def get_all_endpoint_data(self):
         endpoints = []
@@ -142,39 +149,45 @@ class ISE:
         # clean list and transform json str to dicts to load into DF
         endpoints = list(set(endpoints))
         endpoints = [json.loads(epd) for epd in endpoints]
-        self.logger.warning(f'Gathered {len(endpoints)} endpoints from ISE')
+        self.logger.info(f'Gathered {len(endpoints)} endpoints from ISE')
         self.endpoints = pd.DataFrame(endpoints)
 
-    def get_endpoint_data(self, mac_address):
+    def get_endpoint_data(self, mac_address,pbar_func=None):
+        self.logger.debug(f'spawning new process for endpoint_data on {getpid()}')
         # Mac addr must be 11:11:11:11:11:11 notation
         response = self.session.get(f'https://{self.ip}/admin/rs/uiapi/visibility/endpoint/{mac_address}', headers=self.HEADER_DATA)
+        # if we are using progress bar increment it
+        if pbar_func:
+            pbar_func.update(1)
         if response.status_code == 200:
             ep_info = response.json()
             return ep_info
         self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
     def get_metadata_from_endpoints(self, specific: str = False):
+        pbar = tqdm(desc='Getting Endpoint Metadata',total=len(self.endpoints['MACAddress']),colour='red')
         try:
             if specific:
-                self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+                self.endpoints[specific] = self.endpoints['MACAddress'].apply(lambda x: self.get_endpoint_data(x,pbar).get(specific))
             else:
                 # gather macs and get all attr from them
-                ep_name = self.endpoints['MACAddress'].to_list()
-                ep_data = [self.get_endpoint_data(i) for i in ep_name]
+                ep_name_list = self.endpoints['MACAddress'].to_list()
+                ep_data = [self.get_endpoint_data(i,pbar) for i in ep_name_list]
                 self.endpoints = pd.DataFrame(ep_data)
-        except:
+        except Exception as execpt_error:
+            self.logger.debug(f'META_PILL_ERROR: {execpt_error}')
             if specific:
-                self.endpoints[specific] = self.endpoints['Calling-Station-ID'].apply(lambda x: self.get_endpoint_data(x).get(specific))
+                self.endpoints[specific] = self.endpoints['Calling-Station-ID'].apply(lambda x: self.get_endpoint_data(x,pbar).get(specific))
             else:
                 # gather macs and get all attr from them
-                ep_name = self.endpoints['Calling-Station-ID'].to_list()
-                ep_data = [self.get_endpoint_data(i) for i in ep_name]
+                ep_name_list = self.endpoints['Calling-Station-ID'].to_list()
+                ep_data = [self.get_endpoint_data(i,pbar) for i in ep_name_list]
                 self.endpoints = pd.DataFrame(ep_data)
-
+        pbar.close()
         self.endpoints.replace({None: 'unknown'}, inplace=True)
 
     def get_license_info(self):
-        self.logger.warning('Collecting primary node SN')
+        self.logger.debug('Collecting primary node SN')
         header = self.HEADER_DATA.copy()
 
         license_field = 'command=loadSlConfigDetail&dojo.preventCache=1664971537253'
@@ -184,7 +197,7 @@ class ISE:
         response = self.session.get(f'https://{self.ip}/admin/licenseAction.do', headers=header)
         if response.status_code == 200:
             license_data = response.json()
-            self.logger.warning('Obtained Device Serial Number')
+            self.logger.info('Obtained Device Serial Number')
             return license_data['serialNo']
         self.logger.debug(f'Could not obtain primary node SN - Received HTTP status code:{str(response.status_code)}')
 
@@ -227,34 +240,6 @@ class ISE:
             return hw_data
         self.logger.debug(f'Could not receive data for mac address: {mac_address}')
 
-    def retrieve_endpoint_data(self):
-        # deployment ID
-        self.sn = self.get_license_info()
-        self.endpoint_policies = None
-        self.logger.info('Collecting endpoint data, depending on size of database this can take some time')
-        self.get_all_endpoint_data()
-
-        # since we dont need that much info in step 1 just pull the logical profile else pull all data
-        if self.config['ComplytoConnect']['phase'] == 1:
-            self.get_metadata_from_endpoints(specific='LogicalProfile')
-        elif self.config['ComplytoConnect']['phase'] == 2:
-            self.get_metadata_from_endpoints()
-            # need to get hardware serials also
-            self.join_hw_data()
-
-        self.logger.info('Endpoint data collection complete')
-
-    def join_hw_data(self):
-        ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
-        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
-        hw_data = pd.DataFrame(hw_data)
-        # conform hw data to match self endpoints so we can merge them
-        hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
-        hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
-
-        self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
-        self.endpoints.replace({None: 'unknown'}, inplace=True)
-
     def special_reporting_data(self):
         special_rep = self.config['special_reporting']
         reporting_location = special_rep.get('reporting_location')
@@ -272,6 +257,22 @@ class ISE:
             self.UTILS.create_file_path('archive', f, parent_dir=reporting_location)
         self.get_metadata_from_endpoints(attr_to_look_for)
         self.logger.info('Endpoint special data collection complete')
+
+    def join_hw_data(self):
+        try:
+            ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
+        except Exception as error:
+            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+            self.logout_ise_session()
+            quit()
+        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
+        hw_data = pd.DataFrame(hw_data)
+        # conform hw data to match self endpoints so we can merge them
+        hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
+        hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
+
+        self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
+        self.endpoints.replace({None: 'unknown'}, inplace=True)
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
         raw_df.drop(columns=filter_list, inplace=True)
@@ -292,9 +293,29 @@ class ISE:
                     self.logger.debug(error)
         return raw_df
 
+    def retrieve_endpoint_data(self):
+        # deployment ID
+        self.sn = self.get_license_info()
+        self.endpoint_policies = None
+        self.logger.debug('Collecting endpoint data')
+        self.get_all_endpoint_data()
+        # pull N or all
+        if bool(self.config.get('test_endpoint_pull')):
+            self.logger.info(f'Sample Size of {self.config.get("test_endpoint_pull")} Endpoints being used.')
+            self.endpoints = self.endpoints.loc[:self.config.get('test_endpoint_pull')]
+
+        # since we dont need that much info in step 1 just pull the logical profile else pull all data
+        if self.config['ComplytoConnect']['phase'] == 1:
+            self.get_metadata_from_endpoints(specific='LogicalProfile')
+        elif self.config['ComplytoConnect']['phase'] == 2:
+            self.get_metadata_from_endpoints()
+            # need to get hardware serials also
+            self.join_hw_data()
+
+        self.logger.info('Endpoint data collection complete')
+        self.logout_ise_session()
+
 
 if __name__ == '__main__':
     ise = ISE()
     ise.retrieve_endpoint_data()
-    # ise.get_endpoint_hardware_info('C0:3E:BA:99:3E:29')
-    # print(ise.hw_catalog)

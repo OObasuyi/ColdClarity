@@ -12,8 +12,6 @@ def term_access():
     args = parser.parse_args()
 
     c2r = C2CReport(config_file=args.config_file, test=args.test_count, test_msg=args.test_msg)
-    # TODO: make this a yaml parameter
-    # c2r.create_ise_endpoint_report(incl_report_type='None')
     c2r.create_ise_endpoint_report()
 
 

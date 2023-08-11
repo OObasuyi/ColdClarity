@@ -87,7 +87,7 @@ def log_collector(log_all=False):
         logger.handlers = []
 
     conHandler = logging.StreamHandler()
-    conHandler.setLevel(logging.WARN)
+    conHandler.setLevel(logging.INFO)
     logformatCon = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%d-%b-%y %H:%M:%S')
     conHandler.setFormatter(logformatCon)
     logger.addHandler(conHandler)

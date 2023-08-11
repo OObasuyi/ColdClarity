@@ -44,28 +44,32 @@ class Messaging:
                 ctype = "application/octet-stream"
             maintype, subtype = ctype.split("/", 1)
 
-            with open(msg_attac_loc_or_buf, "rb") as fp:  
+            with open(msg_attac_loc_or_buf, "rb") as fp:
                 part = MIMEBase(maintype, subtype)
                 part.set_payload(fp.read())
         except Exception as error:
             self.logger.debug(f'ISE_MESSAGING: {error}')
             part = MIMEApplication(self.UTILS.df_to_string_buffer(msg_attac_loc_or_buf))
-            
+
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f"attachment; filename={attachment_name}", )
         message.attach(part)
         return message
 
-    def send_message(self, msg_attac_loc_or_buf,attachment_name=None):
+    def send_message(self, msg_attac_loc_or_buf, attachment_name=None):
         if not attachment_name:
             if '/' in msg_attac_loc_or_buf:
                 attachment_name = msg_attac_loc_or_buf.split('/')[-1]
             else:
                 attachment_name = msg_attac_loc_or_buf.split('\/')[-1]
         else:
-           attachment_name = attachment_name
+            attachment_name = attachment_name
 
-        message = self.prep_message(attachment_name, msg_attac_loc_or_buf)
+        # Test case
+        if self.cfg.get('test_messaging_svc'):
+            message = self.test_prep_message()
+        else:
+            message = self.prep_message(attachment_name, msg_attac_loc_or_buf)
 
         if self.cfg['smtp']['port'] == 587:
             # Create a secure SSL context
@@ -86,8 +90,18 @@ class Messaging:
                 server.login(self.sender_email, self.password)
 
             server.send_message(message)
+            server.quit()
         except Exception as e:
             print(e)
-        finally:
-            server.quit()
-#test commit
+
+    def test_prep_message(self):
+        message = MIMEMultipart("alternative")
+        message["Subject"] = f"{self.cfg['report']['Command_name']} C2C Phase {self.cfg['ComplytoConnect']['phase']} Report"
+        message["From"] = self.sender_email
+        message["To"] = self.dest_email
+        if self.send_cc is not None:
+            message["Cc"] = ', '.join(self.send_cc)
+
+        # message body
+        message.attach(MIMEText(self.text_body, 'plain'))
+        return message

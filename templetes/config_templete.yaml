@@ -57,14 +57,17 @@ endpoint_buckets_match:
   - 'test'
   - 'unknown'
 
-# if your doing step 2 you will need this to match the posture policy creating in ISE, enter the ISE created policy the right (the key value)
+# if your doing step 2 you will need this to match the posture policy (we are matching on posture rule and NOT the
+# posture condition since one rule can have many conditions to be compliant) creating in ISE, enter the ISE created
+# policy the right (the key value)
 step2_conditions_match:
   - anti_mw: example_anti_malware_policy_name
   - patching: example_patching_policy_name
   - fw: example_anti_fw_policy_name
   - encrypt: example_disk_encrypt_policy_name
 
-# if more col are needed in the report post them here the key value (item to the left) will be a column in the report, while the value with the amount
+# SAME RULES APPLIES AS ABOVE if more col are needed in the report post them here the key value (item to the left)
+# will be a column in the report, while the value with the amount
 step2_conditions_custom:
   - usb: example_custom_policy_name
 
@@ -89,3 +92,10 @@ only_connected: True
 
 ComplytoConnect:
   step: 1
+
+
+
+# DIAG
+test_endpoint_pull: 0
+test_messaging_svc: False
+debug_console_login: False
