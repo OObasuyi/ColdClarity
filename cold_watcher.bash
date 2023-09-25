@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # made for RHEL PODMAN but can be switched for DOCKER
-CONTAINER_NAME="coldclarity"
+IMAGE_NAME="coldclarity"
+CONTAINER_NAME="ColdClaritySVCS_$RANDOM"
 CONFIG_LOCATION="/path/to/config"
 CERT_PFX_LOCATION="PATH/TO/CERT"
 MAX_RETRIES=3
@@ -9,18 +10,12 @@ RETRIES=0
 
 # IF YOU DONT USE CERT DROP "-v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z" from the command line
 start_container() {
-    podman run -it -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z "$CONTAINER_NAME"
+    podman run -it -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
 
 cleanup_containers() {
-    # List ColdClarity containers, including stopped ones
-    container_list=$(podman ps -a --filter "ancestor=$CONTAINER_NAME" --filter "status=exited" -q)
-
-    if [ -n "$container_list" ]; then
-        # Remove all stopped containers
-        podman rm "$container_list"
-        echo "Removed STOPPED $IMAGE_NAME containers"
-    fi
+    podman rm "$CONTAINER_NAME"
+    echo "Removed STOPPED $CONTAINER_NAME"
 }
 
 # Trap exit signal to ensure cleanup even on script interruption
