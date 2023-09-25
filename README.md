@@ -4,11 +4,11 @@ Comply-to-Connect Reporting App for Identity Service Engine (ISE)
 
 
 ## Table of Contents
-- [Running Report](#Running Report)
+- [Reporting](#Reporting)
 - [Templates](#Templates)
 - [FAQs](#FAQs) 
 
-## Running Report 
+## Reporting
 ### Using Source
 ```shell
 # make sure you in the ColdClarity Dir. 
