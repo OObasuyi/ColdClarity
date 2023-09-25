@@ -311,7 +311,8 @@ class ISE:
             self.get_metadata_from_endpoints()
             # need to get hardware serials also
             self.join_hw_data()
-
+        # since ISE doesn't de-conflict logical profiles when two logical profiles are assigned to the same endpoint, take the first res. for more see FAQ
+        self.endpoints['LogicalProfile'] = self.endpoints['LogicalProfile'].apply(lambda x: x.split(',')[0])
         self.logger.info('Endpoint data collection complete')
         self.logout_ise_session()
 
