@@ -18,6 +18,7 @@ python3.8 term_access.py --config_file config.yaml
 ```
 ### Using Containers
 ```shell
+# THE CONTAINER IS AVAILBLE UPON 
 # you can use either docker or podman, but the following is created for podman.
 # you can also run it natively with out this script as its only if you want to ensure the app runs and exits properly 
 # one use-case for this is running this on a cron job in a enviroment where the app will not work natively
