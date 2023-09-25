@@ -13,12 +13,13 @@ start_container() {
 }
 
 cleanup_containers() {
-    # List all containers, including stopped ones
-    container_list=$(podman ps -a -q)
+    # List ColdClarity containers, including stopped ones
+    container_list=$(podman ps -a --filter "ancestor=$CONTAINER_NAME" --filter "status=exited" -q)
 
     if [ -n "$container_list" ]; then
         # Remove all stopped containers
-        podman rm $container_list
+        podman rm "$container_list"
+        echo "Removed STOPPED $IMAGE_NAME containers"
     fi
 }
 
