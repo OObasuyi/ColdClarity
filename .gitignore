@@ -244,3 +244,4 @@ cython_debug/
 /Config_information/
 /endpoint_reports/
 .tar
+/coldclarity.tar

@@ -29,13 +29,19 @@ trap cleanup_containers EXIT
 while true; do
     start_container
 
-    # Check if the container is running
-    if podman container exists "$CONTAINER_NAME"; then
-        echo "ColdClarity is running."
+     # Wait for the container to exit
+    podman wait "$CONTAINER_NAME"
+
+    # Get the exit status of the container
+    container_status=$(podman inspect -f "{{.State.ExitCode}}" "$CONTAINER_NAME")
+
+    # Check if the container exited gracefully (with an exit status of 0)
+    if [ "$container_status" -eq 0 ]; then
+        echo "ColdClarity has completed"
         break
     else
         # The container failed to start
-        echo "ColdClarity failed to start."
+        echo "ColdClarity exited with an error (Exit Status: $container_status)."
 
         # Increment the retry counter
         RETRIES=$((RETRIES + 1))
