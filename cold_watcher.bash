@@ -7,7 +7,7 @@ CONFIG_LOCATION="/path/to/config"
 CERT_PFX_LOCATION="PATH/TO/CERT"
 WORKING_DIR="/opt/$IMAGE_NAME"
 LOGGING_FILE="$WORKING_DIR/logs/$IMAGE_NAME.log"
-MAX_RETRIES=3
+MAX_RETRIES=4
 RETRIES=0
 
 # Script should run from the /OPT directory; configs can be anywhere
@@ -24,7 +24,7 @@ fi
 
 
 start_container() {
-    podman run -d -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z --name "$CONTAINER_NAME" "$IMAGE_NAME"
+    podman run -it -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
 
 cleanup_containers() {
@@ -36,7 +36,12 @@ cleanup_containers() {
 trap cleanup_containers EXIT
 
 while true; do
+    # start container
     init_container=$(start_container)
+
+    # check to make sure the container really started
+    container_started=$(podman ps -a | grep $CONTAINER_NAME)
+
     echo "$(date): $init_container" >> "$IMAGE_NAME started with $LOGGING_FILE"
 
      # Wait for the container to exit
@@ -46,9 +51,8 @@ while true; do
     container_status=$(podman inspect -f "{{.State.ExitCode}}" "$CONTAINER_NAME")
 
 
-    # check to make sure the container really started
-    container_ID_pat="^[0-9a-fA-F]{64}$"
-    if [[ $init_container =~ $container_ID_pat ]]; then
+
+    if [[ $container_started == *"$CONTAINER_NAME"* ]]; then
           echo "$(date): $CONTAINER_NAME started successfully" >> "$LOGGING_FILE"
 
           # Check if the container exited gracefully (with an exit status of 0)
@@ -57,17 +61,17 @@ while true; do
               break
           else
                  # if we failed because the container started but problem is from app
-                 echo "$(date): ColdClarity exited with an error (Exit Status: $container_status)." >> "$LOGGING_FILE"
+                 echo "$(date): ERROR: ColdClarity did not execute properly (Exit Status: $container_status)." >> "$LOGGING_FILE"
 
                  # Increment the retry counter
                  RETRIES=$((RETRIES + 1))
 
                 # Check if we've exceeded the maximum number of retries
                 if [ $RETRIES -ge $MAX_RETRIES ]; then
-                    echo "$(date): Maximum number of retries reached. Exiting." >> "$LOGGING_FILE"
+                    echo "$(date): ERROR: Maximum number of retries reached. Exiting." >> "$LOGGING_FILE"
                     exit 1
                 else
-                    echo "$(date): Retrying (Attempt $RETRIES)..." >> "$LOGGING_FILE"
+                    echo "$(date): ERROR: Retrying (Attempt $RETRIES)..." >> "$LOGGING_FILE"
                     sleep 5
                 fi
           fi
@@ -78,7 +82,7 @@ while true; do
 
       # Check if we've exceeded the maximum number of retries
       if [ $RETRIES -ge $MAX_RETRIES ]; then
-          echo "$(date): Maximum number of retries reached. Exiting." >> "$LOGGING_FILE"
+          echo "$(date): ERROR: Maximum number of retries reached. Exiting." >> "$LOGGING_FILE"
           exit 1
       else
           echo "$(date): Retrying (Attempt $RETRIES)..." >> "$LOGGING_FILE"
