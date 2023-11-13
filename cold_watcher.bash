@@ -24,12 +24,12 @@ fi
 
 
 start_container() {
-    podman run -it -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z --name "$CONTAINER_NAME" "$IMAGE_NAME"
+    podman run -it --privileged -v "$CONFIG_LOCATION":/ColdClarity/Config_information/config.yaml:Z -v "$CERT_PFX_LOCATION":/ColdClarity/certificate_information/ise_client_cert.pfx:Z --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
 
 cleanup_containers() {
     podman rm -f "$CONTAINER_NAME"
-    echo "$(date): Removed STOPPED $CONTAINER_NAME" >> "$LOGGING_FILE"
+    echo "$(date): Cleaning up and removing used $CONTAINER_NAME" >> "$LOGGING_FILE"
 }
 
 # Trap exit signal to ensure cleanup even on script interruption
@@ -38,11 +38,12 @@ trap cleanup_containers EXIT
 while true; do
     # start container
     init_container=$(start_container)
+    echo "$(date): INFO: $init_container" >> "$LOGGING_FILE"
+
 
     # check to make sure the container really started
     container_started=$(podman ps -a | grep $CONTAINER_NAME)
 
-    echo "$(date): $init_container" >> "$IMAGE_NAME started with $LOGGING_FILE"
 
      # Wait for the container to exit
     podman wait "$CONTAINER_NAME"
