@@ -264,15 +264,19 @@ class ISE:
         except Exception as error:
             self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
             self.logout_ise_session()
-            quit()
+            return
         hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
         hw_data = pd.DataFrame(hw_data)
         # conform hw data to match self endpoints so we can merge them
         hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
-        hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
-
-        self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
-        self.endpoints.replace({None: 'unknown'}, inplace=True)
+        # since we might not have anything in the df lets error check and if it doesnt skip hw processing
+        try:
+            hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
+            self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
+            self.endpoints.replace({None: 'unknown'}, inplace=True)
+        except Exception as error:
+            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+            return
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
         raw_df.drop(columns=filter_list, inplace=True)
