@@ -1,0 +1,102 @@
+report:
+  policy_name: 'NAC Policy Name'
+  owner: 'einetworks'
+  area_of_operation: ' North Campus'
+  # the script will output the file in the same dir where it was ran, specify a path to change where you want to save it at.
+  destination_filepath: 'Absolute/Path/ISEDeviceReport.csv'
+  send_email: False
+  organization: 'einetworks'
+  prepared_for: 'John Doe'
+  program name: 'endpoint records'
+
+ise:
+  hostname: ''
+  ip: ''
+
+
+authentication:
+  text_based:
+    use: False
+    auth_source: 'Internal'
+    username: False
+    password: False
+  cert_based:
+    use: True
+    cert_pfx_location: 'ise_client_cert.pfx'
+    cert_password: False
+  #pipeline use ise_api creds in ise
+  pipeline: False
+
+smtp:
+  email: isereporter@mailrelay.local
+  password: False
+  server: mailrelay.local
+  port: 25
+  destination_email: bigbossman@mailrelay.local
+  destination_email_cc:
+    - otherpeoplewholikeuselessemails@mailrelay.local
+  body: prepared reports for review!
+
+# if you have custom profiles and want them to fall under another profile for the report in the key value enter the real
+# name and  in the value portion enter the name it should go in the report
+custom_profiles_match:
+  - 'test': 'Unknown'
+  - 'test': 'Unknown'
+  - test': 'Unknown'
+  - 'test': 'Microsoft-Workstation'
+  - 'test': 'Microsoft-Workstation'
+  - 'test': 'Microsoft-Workstation'
+
+# logical buckets to which endpoints will be matched too. these are created from ISE logical profile
+endpoint_buckets_match:
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'test'
+  - 'unknown'
+
+# if your doing step 2 you will need this to match the posture policy (we are matching on posture rule and NOT the
+# posture condition since one rule can have many conditions to be compliant) creating in ISE, enter the ISE created
+# policy the right (the key value)
+step2_conditions_match:
+  - anti_mw: example_anti_malware_policy_name
+  - patching: example_patching_policy_name
+  - fw: example_anti_fw_policy_name
+  - encrypt: example_disk_encrypt_policy_name
+
+# SAME RULES APPLIES AS ABOVE if more col are needed in the report post them here the key value (item to the left)
+# will be a column in the report, while the value with the amount
+step2_conditions_custom:
+  - usb: example_custom_policy_name
+
+
+# if you need a custom report thats already sitting in the repository server
+special_reporting:
+  use: False
+  reporting_location: '/path/to/reports'
+  files_to_look_for: 
+    - 'test'
+  name_of_file_to_send: 'suff_to_send.csv'
+  filter_list: 
+    - 'useless Col data'
+  filter_specifics:
+    'ACCT_SESSION_TIME': 0
+    'AUTHENTICATION_RULE': 'Allow Guest Users'
+  get_attribute_from_endpoint: 'MAC ADDRESS' 
+
+# get all endpoints or just connected ones
+only_connected: True
+
+
+EndpointData:
+  step: 1
+
+
+
+# DIAG
+test_endpoint_pull: 0
+test_messaging_svc: False
+debug_console_login: False

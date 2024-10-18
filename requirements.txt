@@ -1,0 +1,5 @@
+cryptography
+pandas
+PyYAML
+requests
+tqdm
