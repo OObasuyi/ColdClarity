@@ -33,7 +33,7 @@ class ISEReport:
             quit()
 
         # reg report
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.phase}_{self.timestr}.csv')
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
         self.ise.retrieve_endpoint_data()
         ise_eps = self.ise.endpoints.copy()
@@ -58,11 +58,11 @@ class ISEReport:
             writer.writerow(['Owner: ' + self.ise.config['report']['owner']])
             writer.writerow(['Area of Operations: ' + self.ise.config['report']['area_of_operation']])
             writer.writerow([f'Deployment ID:{self.ise.sn}'])
-            writer.writerow([f'{self.reporting_name}-Step{self.ise.phase}-2.0-MER-Information'])
+            writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.0-MER-Information'])
             # logical profile summary
-            if self.ise.config['EndpointData']['phase'] == 1:
+            if self.ise.step == 1:
                 self.ise_step_1(writer, ise_eps)
-            elif self.ise.config['EndpointData']['phase'] == 2:
+            elif self.ise.step == 2:
                 self.ise_step_2(writer)
 
             self.ise.logger.info(f'Report Done!. Save file at: {fname}')
@@ -73,7 +73,7 @@ class ISEReport:
             messager.send_message(msg_attac_loc_or_buf=fname)
 
     def ise_step_1(self, writer, ise_eps):
-        writer.writerow([f'{self.reporting_name}-Step{self.ise.phase}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
+        writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
         for cat in self.ise_summary_list:
             logical_group = ise_eps[ise_eps['LogicalProfile'] == cat]
             if not logical_group.empty:
@@ -81,7 +81,7 @@ class ISEReport:
             else:
                 writer.writerow([cat, 0])
         # endpoint policy summary
-        writer.writerow([f'{self.reporting_name}-Step{self.ise.phase}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
+        writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
         grouped_eps = ise_eps.groupby(by=['EndPointPolicy'])
         grouped_eps_names = list(grouped_eps.groups)
         for gp_name in grouped_eps_names:
@@ -170,7 +170,7 @@ class ISEReport:
 
     def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
         # function import until we plop this on the devops server
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.phase}_{self.timestr}.csv')
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         vis = None
         if type_ == 'software':
             self.ise.logger.info('Collecting Endpoint software information from ISE')

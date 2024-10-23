@@ -54,7 +54,7 @@ class ISE:
         # session information
         self.get_session()
         self.init_ise_session()
-        self.phase = self.config['EndpointData']['phase']
+        self.step = self.config['EndpointData']['step']
 
     def get_session(self):
         self.logger.debug('Obtaining Session Object')
@@ -312,9 +312,9 @@ class ISE:
             self.endpoints = self.endpoints.loc[:self.config.get('test_endpoint_pull')]
 
         # since we dont need that much info in step 1 just pull the logical profile else pull all data
-        if self.config['EndpointData']['phase'] == 1:
+        if self.config['EndpointData']['step'] == 1:
             self.get_metadata_from_endpoints(specific='LogicalProfile')
-        elif self.config['EndpointData']['phase'] == 2:
+        elif self.config['EndpointData']['step'] == 2:
             self.get_metadata_from_endpoints()
             # need to get hardware serials also
             self.join_hw_data()
