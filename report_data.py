@@ -107,10 +107,12 @@ class ISEReport:
 
         # normalize
         ep_active.columns = ep_active.columns.str.lower()
-        ep_active = ep_active.apply(lambda x: x.astype(str).str.lower())
+        ep_active = ep_active.astype(str).apply(lambda x: x.str.lower())
 
+        # todo: need to account if pd come back empty
         ep_postured.columns = ep_postured.columns.str.lower()
-        ep_postured = ep_postured.apply(lambda x: x.astype(str).str.lower())
+        # todo: weird prob
+        ep_postured = ep_postured.astype(str).apply(lambda x: x.str.lower())
 
         # total active endpoints
         writer.writerow(['Total Discovered Endpoints', ep_active.shape[0]])

@@ -151,9 +151,10 @@ class ISE:
             cursor.execute(sql_string)
             columns = [desc[0] for desc in cursor.description]
             output = cursor.fetchall()
+            cursor.close()
             connection.close()
         except Exception as execpt_error:
-            self.logger.debug(f'error pulling data from Dataconnect: {execpt_error}')
+            self.logger.info(f'error pulling data from Dataconnect: {execpt_error}')
             return pd.DataFrame([])
 
         try:
@@ -161,7 +162,7 @@ class ISE:
             dc_pd = pd.DataFrame(output, columns=columns)
             return dc_pd
         except Exception as execpt_error:
-            self.logger.debug(f'error framing data from dataconnect: {execpt_error}')
+            self.logger.info(f'error framing data from dataconnect: {execpt_error}')
             return pd.DataFrame([])
 
     def mnt_data_retrival(self, resource):
@@ -338,24 +339,27 @@ class ISE:
         self.logger.info('Endpoint special data collection complete')
 
     def join_hw_data(self):
-        try:
-            ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
-        except Exception as error:
-            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
-            self.logout_ise_session()
-            return
-        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
-        hw_data = pd.DataFrame(hw_data)
-        # conform hw data to match self endpoints so we can merge them
-        hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
-        # since we might not have anything in the df lets error check and if it doesnt skip hw processing
-        try:
-            hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
-            self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
-            self.endpoints.replace({None: 'unknown'}, inplace=True)
-        except Exception as error:
-            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
-            return
+        pass
+        # todo: will fix later if needed
+        # try:
+        #     ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
+        # except Exception as error:
+        #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+        #     self.logout_ise_session()
+        #
+        #     return
+        # hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
+        # hw_data = pd.DataFrame(hw_data)
+        # # conform hw data to match self endpoints so we can merge them
+        # hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
+        # # since we might not have anything in the df lets error check and if it doesnt skip hw processing
+        # try:
+        #     hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
+        #     self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
+        #     self.endpoints.replace({None: 'unknown'}, inplace=True)
+        # except Exception as error:
+        #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+        #     return
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
         raw_df.drop(columns=filter_list, inplace=True)
