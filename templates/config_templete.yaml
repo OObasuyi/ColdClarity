@@ -90,9 +90,13 @@ special_reporting:
 # get all endpoints or just connected ones
 only_connected: True
 
-
+# how deep you want the reports to be
 EndpointData:
   step: 1
+
+# credentials for dataconnect
+dataconnect:
+  password: dcpassword1234
 
 
 

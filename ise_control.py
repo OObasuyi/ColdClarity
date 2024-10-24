@@ -8,6 +8,8 @@ from tqdm import tqdm
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
 from os import getpid
+from ssl import create_default_context, CERT_NONE
+import oracledb
 
 requests.packages.urllib3.disable_warnings()
 
@@ -113,6 +115,37 @@ class ISE:
 
     def logout_ise_session(self):
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
+
+    def dataconnect_engine(self,sql_string):
+        # skip Oracle Server Cert Validation
+        db_ssl_context = create_default_context()
+        db_ssl_context.check_hostname = False
+        db_ssl_context.verify_mode = CERT_NONE
+
+        # connect to DB
+        try:
+            connection = oracledb.connect(
+                user='dataconnect',
+                password=self.config['dataconnect']['password'],
+                host=self.ip,
+                service_name='cpm10',
+                protocol='tcps',
+                port=2484,
+                ssl_context=db_ssl_context
+            )
+
+            cursor = connection.cursor()
+            cursor.execute(sql_string)
+            columns = [desc[0] for desc in cursor.description]
+
+            output = cursor.fetchall()
+            df = pd.DataFrame(output, columns=columns)
+
+            connection.close()
+
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
 
     def get_all_endpoint_data(self):
         endpoints = []
@@ -322,6 +355,8 @@ class ISE:
         self.endpoints['LogicalProfile'] = self.endpoints['LogicalProfile'].apply(lambda x: x.split(',')[0])
         self.logger.info('Endpoint data collection complete')
         self.logout_ise_session()
+
+
 
 
 if __name__ == '__main__':

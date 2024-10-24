@@ -245,3 +245,4 @@ config.yaml
 /endpoint_reports/
 .tar
 /coldclarity.tar
+/sandbox/
