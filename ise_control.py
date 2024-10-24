@@ -122,8 +122,8 @@ class ISE:
         db_ssl_context.check_hostname = False
         db_ssl_context.verify_mode = CERT_NONE
 
-        # connect to DB
         try:
+            # connect to DB
             connection = oracledb.connect(
                 user='dataconnect',
                 password=self.config['dataconnect']['password'],
@@ -133,19 +133,24 @@ class ISE:
                 port=2484,
                 ssl_context=db_ssl_context
             )
-
+            # get info from DB
             cursor = connection.cursor()
             cursor.execute(sql_string)
             columns = [desc[0] for desc in cursor.description]
-
             output = cursor.fetchall()
-            df = pd.DataFrame(output, columns=columns)
-
             connection.close()
-
-        except Exception as e:
-            print(f"Error: {e}")
+        except Exception as execpt_error:
+            self.logger.debug(f'error pulling data from Dataconnect: {execpt_error}')
             return None
+
+        try:
+            # put in df
+            dc_pd = pd.DataFrame(output, columns=columns)
+            return dc_pd
+        except Exception as execpt_error:
+            self.logger.debug(f'error framing data from dataconnect: {execpt_error}')
+            return None
+
 
     def get_all_endpoint_data(self):
         endpoints = []
