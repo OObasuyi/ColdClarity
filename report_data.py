@@ -35,6 +35,7 @@ class ISEReport:
         # reg report
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
+        # todo: replace this with the newer api!!!!
         self.ise.retrieve_endpoint_data()
         ise_eps = self.ise.endpoints.copy()
 
@@ -97,26 +98,35 @@ class ISEReport:
 
         # normalize df
         step2_data = self.ise.endpoints.copy()
+        # todo: merge active sessions with posture res dfs
 
-        # get_all_endpoints = "select * from endpoints_data"
-        # self.ise.dataconnect_engine(get_all_endpoints)
-        step2_data.columns = step2_data.columns.str.lower()
-        step2_data = step2_data.apply(lambda x: x.astype(str).str.lower())
+        get_all_posture_endpoints = "select * from posture_assessment_by_condition"
+        ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
+        ep_active = self.ise.get_all_active_sessions()
+        ep_profiled_count = self.ise.get_all_profiler_count()
+
+        # normalize
+        ep_active.columns = ep_active.columns.str.lower()
+        ep_active = ep_active.apply(lambda x: x.astype(str).str.lower())
+
+        ep_postured.columns = ep_postured.columns.str.lower()
+        ep_postured = ep_postured.apply(lambda x: x.astype(str).str.lower())
 
         # total active endpoints
-        writer.writerow(['Total Discovered Endpoints', step2_data.shape[0]])
+        writer.writerow(['Total Discovered Endpoints', ep_active.shape[0]])
         # devices that can posture
-        writer.writerow(['Total Managed Endpoints', step2_data[step2_data["devicecompliance"] != 'unknown'].shape[0]])
+        writer.writerow(['Total Managed Endpoints', ep_postured.shape[0]])
         # device that cant  posture
-        writer.writerow(['Total Non-Managed Endpoints', step2_data[step2_data["devicecompliance"] == 'unknown'].shape[0]])
+        writer.writerow(['Total Non-Managed Endpoints', int(ep_active.shape[0] - ep_postured.shape[0])])
         # devices that can auth via 8021.x
-        writer.writerow(['Total 802.1X Endpoints', step2_data[step2_data["authenticationmethod"].isin(['x509_pki'])].shape[0]])
+        writer.writerow(['Total 802.1X Endpoints', ep_active[ep_active['user_name'] != ep_active['calling_station_id']].shape[0]])
         # devices that are MAB
-        writer.writerow(['Total MAB Endpoints', step2_data[step2_data["authenticationmethod"] == 'lookup'].shape[0]])
+        writer.writerow(['Total MAB Endpoints', ep_active[ep_active['user_name'] == ep_active['calling_station_id']].shape[0]])
         # how many profiles we have
-        writer.writerow(['Total Profiled Endpoints', step2_data[step2_data["endpointpolicy"] != 'unknown'].shape[0]])
+        writer.writerow(['Total Profiled Endpoints', ep_profiled_count])
         # if we are doing webauth or some type of auth???
-        writer.writerow(['Total Authenticated Other (SNMP etc)', step2_data[~step2_data["authenticationmethod"].isin(['unknown', 'lookup', 'x509_pki'])].shape[0]])
+        # todo: how would we handle other types of authentications
+        writer.writerow(['Total Authenticated Other (SNMP etc)', 0])
 
         # reporting Break
         writer.writerow([])

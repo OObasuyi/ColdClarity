@@ -125,17 +125,6 @@ class ISE:
         em_session.auth = HTTPBasicAuth(auth_info['ers_based']['username'], auth_info['ers_based']['password'])
         return em_session
 
-    def get_all_active_sessions(self) -> pd.DataFrame:
-        self.logger.debug('Obtaining all active sessions')
-        galls = self.ers_mnt_ise_session()
-        res = galls.get(f'https://{self.ip}/admin/API/mnt/Session/ActiveList')
-        if res.status_code == 200:
-            data_dict = xmlparse(res.content)
-            df = pd.json_normalize(data_dict['activeList']['activeSession'])
-            return df
-        else:
-            self.logger.info('No active sessions found in results!')
-            return pd.DataFrame([])
 
     def logout_ise_session(self):
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
@@ -174,6 +163,32 @@ class ISE:
         except Exception as execpt_error:
             self.logger.debug(f'error framing data from dataconnect: {execpt_error}')
             return pd.DataFrame([])
+
+    def mnt_data_retrival(self, resource):
+        mnt_sess = self.ers_mnt_ise_session()
+        mnt_result = mnt_sess.get(f'https://{self.ip}/admin/API/mnt/{resource}')
+        return mnt_result
+
+    def get_all_active_sessions(self) -> pd.DataFrame:
+        self.logger.debug('Obtaining all active sessions')
+        galls = self.mnt_data_retrival("Session/ActiveList")
+        if galls.status_code == 200:
+            data_dict = xmlparse(galls.content)
+            df = pd.json_normalize(data_dict['activeList']['activeSession'])
+            return df
+        else:
+            self.logger.info('No active sessions found in results!')
+            return pd.DataFrame([])
+
+    def get_all_profiler_count(self):
+        self.logger.debug('Obtaining active profile count')
+        gapc = self.mnt_data_retrival("Session/ProfilerCount")
+        if gapc.status_code == 200:
+            data_dict = xmlparse(gapc.content)
+            profiler_count = int(data_dict['sessionCount']['count'])
+            return profiler_count
+        self.logger.info('No active Profiles found in results!')
+        return 0
 
     def get_all_endpoint_data(self):
         endpoints = []
