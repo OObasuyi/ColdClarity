@@ -3,12 +3,14 @@ import json
 
 import pandas as pd
 import requests
+from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
 from os import getpid
 from ssl import create_default_context, CERT_NONE
+from xmltodict import parse as xmlparse
 import oracledb
 
 requests.packages.urllib3.disable_warnings()
@@ -113,10 +115,32 @@ class ISE:
         self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
         quit()
 
+    def ers_mnt_ise_session(self) -> requests.Session:
+        self.logger.debug('Obtaining ERS/MNT Object')
+        em_session = requests.Session()
+        em_session.verify = False
+        # it only accepts XML for now >:(
+        auth_info = self.config['authentication']
+        em_session.headers = {"Accept: application/xml"}
+        em_session.auth = HTTPBasicAuth(auth_info['ers_based']['username'], auth_info['ers_based']['password'])
+        return em_session
+
+    def get_all_active_sessions(self) -> pd.DataFrame:
+        self.logger.debug('Obtaining all active sessions')
+        galls = self.ers_mnt_ise_session()
+        res = galls.get(f'https://{self.ip}/admin/API/mnt/Session/ActiveList')
+        if res.status_code == 200:
+            data_dict = xmlparse(res.content)
+            df = pd.json_normalize(data_dict['activeList']['activeSession'])
+            return df
+        else:
+            self.logger.info('No active sessions found in results!')
+            return pd.DataFrame([])
+
     def logout_ise_session(self):
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
 
-    def dataconnect_engine(self,sql_string):
+    def dataconnect_engine(self,sql_string) -> pd.DataFrame:
         # skip Oracle Server Cert Validation
         db_ssl_context = create_default_context()
         db_ssl_context.check_hostname = False
@@ -141,7 +165,7 @@ class ISE:
             connection.close()
         except Exception as execpt_error:
             self.logger.debug(f'error pulling data from Dataconnect: {execpt_error}')
-            return None
+            return pd.DataFrame([])
 
         try:
             # put in df
@@ -149,8 +173,7 @@ class ISE:
             return dc_pd
         except Exception as execpt_error:
             self.logger.debug(f'error framing data from dataconnect: {execpt_error}')
-            return None
-
+            return pd.DataFrame([])
 
     def get_all_endpoint_data(self):
         endpoints = []

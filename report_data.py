@@ -97,6 +97,9 @@ class ISEReport:
 
         # normalize df
         step2_data = self.ise.endpoints.copy()
+
+        # get_all_endpoints = "select * from endpoints_data"
+        # self.ise.dataconnect_engine(get_all_endpoints)
         step2_data.columns = step2_data.columns.str.lower()
         step2_data = step2_data.apply(lambda x: x.astype(str).str.lower())
 

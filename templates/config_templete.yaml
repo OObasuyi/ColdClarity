@@ -24,6 +24,9 @@ authentication:
     use: True
     cert_pfx_location: 'ise_client_cert.pfx'
     cert_password: False
+  ers_based:
+    username: 'admin'
+    password: 'admin'
   #pipeline use ise_api creds in ise
   pipeline: False
 
