@@ -160,6 +160,15 @@ class ISE:
         try:
             # put in df
             dc_pd = pd.DataFrame(output, columns=columns)
+            # clean DB objects from df
+            badcols = []
+            for x in dc_pd.columns.tolist():
+                try:
+                    dc_pd[x].astype(str)
+                except Exception as error:
+                    self.logger.debug(f'error converting column {x} to string {error}')
+                    badcols.append(x)
+            dc_pd.drop(columns=badcols, inplace=True)
             return dc_pd
         except Exception as execpt_error:
             self.logger.info(f'error framing data from dataconnect: {execpt_error}')
