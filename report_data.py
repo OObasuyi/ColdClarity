@@ -98,28 +98,47 @@ class ISEReport:
 
         # normalize df
         step2_data = self.ise.endpoints.copy()
-        # todo: merge active sessions with posture res dfs
 
+        # db queries
         get_all_posture_endpoints = "select * from posture_assessment_by_condition"
+        get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL from RADIUS_AUTHENTICATIONS"
+
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
+        ep_auths = self.ise.dataconnect_engine(get_all_auths)
+
         ep_active = self.ise.get_all_active_sessions()
         ep_profiled_count = self.ise.get_all_profiler_count()
+
+        if any([ep_postured.empty,ep_active.empty]):
+            self.ise.logger.critical(f'No active posture or Posture sessions found!')
+            raise ValueError(f'No active posture or Posture sessions found!')
 
         # normalize
         ep_active.columns = ep_active.columns.str.lower()
         ep_active = ep_active.astype(str).apply(lambda x: x.str.lower())
 
-        # todo: need to account if pd come back empty
         ep_postured.columns = ep_postured.columns.str.lower()
-        # todo: weird prob
         ep_postured = ep_postured.astype(str).apply(lambda x: x.str.lower())
+
+        ep_auths.drop_duplicates(inplace=True)
+        ep_auths.dropna(inplace=True)
+        ep_auths.reset_index(drop=True, inplace=True)
+
+        ep_auths.columns = ep_auths.columns.str.lower()
+        # conversion needs to happen after the NaNs are dropped
+        ep_auths = ep_auths.astype(str).apply(lambda x: x.str.lower())
+
+        # grouped postured endpoints
+        grouped_posture_macs = ep_postured.groupby('endpoint_id')
 
         # total active endpoints
         writer.writerow(['Total Discovered Endpoints', ep_active.shape[0]])
         # devices that can posture
-        writer.writerow(['Total Managed Endpoints', ep_postured.shape[0]])
-        # device that cant  posture
-        writer.writerow(['Total Non-Managed Endpoints', int(ep_active.shape[0] - ep_postured.shape[0])])
+        writer.writerow(['Total Managed Endpoints', grouped_posture_macs.size().shape[0]])
+        # device that cant posture but are connected
+        postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
+        active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
+        writer.writerow(['Total Non-Managed Endpoints', active_non_postured.shape[0]])
         # devices that can auth via 8021.x
         writer.writerow(['Total 802.1X Endpoints', ep_active[ep_active['user_name'] != ep_active['calling_station_id']].shape[0]])
         # devices that are MAB
@@ -127,17 +146,19 @@ class ISEReport:
         # how many profiles we have
         writer.writerow(['Total Profiled Endpoints', ep_profiled_count])
         # if we are doing webauth or some type of auth???
-        # todo: how would we handle other types of authentications
-        writer.writerow(['Total Authenticated Other (SNMP etc)', 0])
+        dif_auth_df = ep_auths[(ep_auths['authentication_method'] != 'mab') & (ep_auths['authentication_method'] != '8021.x')]
+        writer.writerow(['Total Authenticated Other (SNMP etc)', dif_auth_df.shape[0]])
 
         # reporting Break
         writer.writerow([])
 
         # only get user endpoints
-        non_svr_ep = step2_data[~step2_data['ad-operating-system'].str.contains('windows server | red hat | rhel', regex=True)]
+        only_wkst = ep_postured.drop_duplicates(subset='endpoint_os', keep='first')
+        non_svr_ep = only_wkst[~only_wkst['endpoint_os'].str.contains('server | red hat | rhel', regex=True)]
         # how many user endpoints are reporting posture
-        writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_ep[non_svr_ep["devicecompliance"] != 'unknown'].shape[0]])
+        writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_ep.shape[0]])
         # how many are not
+        # todo: need to cross ref active ep and radius auths to see who is not doing posture for non-managed devices
         writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_svr_ep[non_svr_ep["devicecompliance"] == 'unknown'].shape[0]])
 
         # reporting Break
