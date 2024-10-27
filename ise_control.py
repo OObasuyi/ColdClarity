@@ -57,7 +57,7 @@ class ISE:
         self.ip = self.config['ise']['ip']
         # session information
         self.get_session()
-        # self.init_ise_session()
+        self.init_ise_session()
         self.step = self.config['EndpointData']['step']
 
     def get_session(self):
@@ -274,18 +274,12 @@ class ISE:
 
     def get_license_info(self):
         self.logger.debug('Collecting primary node SN')
-        header = self.HEADER_DATA.copy()
+        deployment_data = 'select HOSTNAME,NODE_TYPE,UDI_SN,ACTIVE_STATUS from NODE_LIST'
 
-        license_field = 'command=loadSlConfigDetail&dojo.preventCache=1664971537253'
-        header['_QPH_'] = self.UTILS.encode_data(license_field)
-        header['Content-Type'] = 'application/x-www-form-urlencoded'
-
-        response = self.session.get(f'https://{self.ip}/admin/licenseAction.do', headers=header)
-        if response.status_code == 200:
-            license_data = response.json()
-            self.logger.info('Obtained Device Serial Number')
-            return license_data['serialNo']
-        self.logger.debug(f'Could not obtain primary node SN - Received HTTP status code:{str(response.status_code)}')
+        node_info = self.dataconnect_engine(deployment_data)
+        sn_data = node_info['UDI_SN'][(node_info['ACTIVE_STATUS'] == 'ACTIVE') & (node_info['NODE_TYPE'].str.contains('MNT'))].iloc[0]
+        self.logger.info('Obtained Device Serial Number')
+        return sn_data
 
     def get_endpoint_software_info(self):
         # applications data
@@ -308,7 +302,7 @@ class ISE:
                           'sortBy=MACAddress&' \
                           'startAt=1&' \
                           'pageSize=10&' \
-                          'total_pages=1&' \
+                          'total_pages=5000&' \
                           'total_entries=1'
 
         # transform to base64 then into the str representation of it
@@ -349,8 +343,8 @@ class ISE:
 
     def join_hw_data(self):
         pass
-        # todo: will fix later if needed
-        # try:
+        # # todo: will fix later if needed
+        # # try:
         #     ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
         # except Exception as error:
         #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
@@ -368,7 +362,7 @@ class ISE:
         #     self.endpoints.replace({None: 'unknown'}, inplace=True)
         # except Exception as error:
         #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
-        #     return
+        # #     return
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
         raw_df.drop(columns=filter_list, inplace=True)

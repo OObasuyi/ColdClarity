@@ -53,12 +53,12 @@ class ISEReport:
 
         with open(fname, 'w+', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([self.ise.config['report']['policy_name'], 'Active'])
+            writer.writerow([self.ise.config['report']['policy_name'], self.ise.config['report']['policy_name']])
             writer.writerow([f'{self.reporting_name} Interim Reporting'])
             writer.writerow([f'{self.reporting_name}-Reporting Information'])
             writer.writerow(['Owner: ' + self.ise.config['report']['owner']])
             writer.writerow(['Area of Operations: ' + self.ise.config['report']['area_of_operation']])
-            # writer.writerow([f'Deployment ID:{self.ise.sn}'])
+            writer.writerow([f'Deployment ID:{self.ise.get_license_info()}'])
             writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.0-MER-Information'])
             # logical profile summary
             if self.ise.step == 1:
@@ -214,23 +214,16 @@ class ISEReport:
                 writer.writerow([f'{report_name} Compliant', total_passed])
                 writer.writerow([f'{report_name} Non-Compliant', total_failed])
 
-
-
-
-        # for match_conditions in posture_cons:
-        #     for k, v in match_conditions.items():
-        #         k, v = k.lower(), v.lower()
-        #         pos_stat[f'{k}_hits'] = pos_stat['posturereport'].apply(lambda x: self.posture_report_spliter(x, v))
-
-        # # get all k values from matched conditions for slotting
-        # matched_keys = [k for match_conditions in posture_cons for k in match_conditions.keys()]
-        # # write the total hits per condition
-        # for mk in matched_keys:
-        #     writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
-        #     writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
-        #
-        # # collect bios serials and sum
-        # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
+        # collect bios serials and sum
+        # todo: need more eps to test
+        # serial_collector = 0
+        # serial_list = ep_postured['endpoint_id'].drop_duplicates().tolist()
+        # for mac in serial_list:
+        #     serial_data = self.ise.get_endpoint_hardware_info(mac,high_level=True)
+        #     pass
+        # # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
+        self.ise.logger.info("Finished all reports!")
+        return
 
     @staticmethod
     def posture_report_spliter(x, get_policy):
