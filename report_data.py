@@ -133,6 +133,7 @@ class ISEReport:
 
         # grouped postured endpoints
         grouped_posture_macs = ep_postured.groupby('endpoint_id')
+
         # grouped_posture_macs.size().shape[0]
         # postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
         # active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
@@ -191,22 +192,45 @@ class ISEReport:
         writer.writerow([])
 
         # Posture compliance
-        pos_stat = step2_data[step2_data["devicecompliance"] != 'unknown']
-        # get posture status by condition
-        for match_conditions in posture_cons:
-            for k, v in match_conditions.items():
-                k, v = k.lower(), v.lower()
-                pos_stat[f'{k}_hits'] = pos_stat['posturereport'].apply(lambda x: self.posture_report_spliter(x, v))
+        # todo: make a switch to see what audits conditions are failing
+        # get posture status by policy
+        grouped_posture_policy = ep_postured.groupby(['policy','endpoint_id'])
+        for posture_dicts in posture_cons:
+            total_passed = 0
+            total_failed = 0
+            for report_name,actual_name in posture_dicts.items():
+                for policy_name, policy_group in grouped_posture_policy:
+                    if actual_name == policy_name[0]:
+                        # get all condition results where we passed or failed
+                        # get the latest result
+                        policy_group.sort_values(by='logged_at', inplace=True,ascending=False)
+                        policy_group.drop_duplicates(subset='endpoint_id', keep='first',inplace=True)
+                        passed = policy_group[policy_group['policy_status'].str.contains('pass')].shape[0]
+                        failed = policy_group[policy_group['policy_status'].str.contains('fail')].shape[0]
+                        # added to counters
+                        total_passed += passed
+                        total_failed += failed
+                # write the total hits per policy
+                writer.writerow([f'{report_name} Compliant', total_passed])
+                writer.writerow([f'{report_name} Non-Compliant', total_failed])
 
-        # get all k values from matched conditions for slotting
-        matched_keys = [k for match_conditions in posture_cons for k in match_conditions.keys()]
-        # write the total hits per condition
-        for mk in matched_keys:
-            writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
-            writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
 
-        # collect bios serials and sum
-        writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
+
+
+        # for match_conditions in posture_cons:
+        #     for k, v in match_conditions.items():
+        #         k, v = k.lower(), v.lower()
+        #         pos_stat[f'{k}_hits'] = pos_stat['posturereport'].apply(lambda x: self.posture_report_spliter(x, v))
+
+        # # get all k values from matched conditions for slotting
+        # matched_keys = [k for match_conditions in posture_cons for k in match_conditions.keys()]
+        # # write the total hits per condition
+        # for mk in matched_keys:
+        #     writer.writerow([f'{mk} Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'passed'].shape[0]])
+        #     writer.writerow([f'{mk} Non-Compliant', pos_stat[pos_stat[f'{mk}_hits'.lower()] == 'failed'].shape[0]])
+        #
+        # # collect bios serials and sum
+        # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
 
     @staticmethod
     def posture_report_spliter(x, get_policy):
