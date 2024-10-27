@@ -24,6 +24,9 @@ authentication:
     use: True
     cert_pfx_location: 'ise_client_cert.pfx'
     cert_password: False
+  ers_based:
+    username: 'admin'
+    password: 'admin'
   #pipeline use ise_api creds in ise
   pipeline: False
 
@@ -61,6 +64,7 @@ endpoint_buckets_match:
 # if your doing step 2 you will need this to match the posture policy (we are matching on posture rule and NOT the
 # posture condition since one rule can have many conditions to be compliant) creating in ISE, enter the ISE created
 # policy the right (the key value)
+### FOR THE VALUES PLEASE CHECK THAT THESE ARE ALL LOWER CASE FOR THEM TO MATCH ####
 step2_conditions_match:
   - anti_mw: example_anti_malware_policy_name
   - patching: example_patching_policy_name
@@ -90,9 +94,13 @@ special_reporting:
 # get all endpoints or just connected ones
 only_connected: True
 
-
+# how deep you want the reports to be
 EndpointData:
   step: 1
+
+# credentials for dataconnect
+dataconnect:
+  password: dcpassword1234
 
 
 

@@ -3,11 +3,15 @@ import json
 
 import pandas as pd
 import requests
+from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
 from os import getpid
+from ssl import create_default_context, CERT_NONE
+from xmltodict import parse as xmlparse
+import oracledb
 
 requests.packages.urllib3.disable_warnings()
 
@@ -111,46 +115,114 @@ class ISE:
         self.logger.critical('Authentication Failed, Please Check Configuration and Try Again')
         quit()
 
+    def ers_mnt_ise_session(self) -> requests.Session:
+        self.logger.debug('Obtaining ERS/MNT Object')
+        em_session = requests.Session()
+        em_session.verify = False
+        # it only accepts XML for now >:(
+        auth_info = self.config['authentication']
+        em_session.headers = {"Accept: application/xml"}
+        em_session.auth = HTTPBasicAuth(auth_info['ers_based']['username'], auth_info['ers_based']['password'])
+        return em_session
+
     def logout_ise_session(self):
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
 
+    def dataconnect_engine(self,sql_string) -> pd.DataFrame:
+        # skip Oracle Server Cert Validation
+        db_ssl_context = create_default_context()
+        db_ssl_context.check_hostname = False
+        db_ssl_context.verify_mode = CERT_NONE
+
+        try:
+            # connect to DB
+            connection = oracledb.connect(
+                user='dataconnect',
+                password=self.config['dataconnect']['password'],
+                host=self.ip,
+                service_name='cpm10',
+                protocol='tcps',
+                port=2484,
+                ssl_context=db_ssl_context
+            )
+            # get info from DB
+            cursor = connection.cursor()
+            cursor.execute(sql_string)
+            columns = [desc[0] for desc in cursor.description]
+            output = cursor.fetchall()
+            cursor.close()
+            connection.close()
+        except Exception as execpt_error:
+            self.logger.info(f'error pulling data from Dataconnect: {execpt_error}')
+            return pd.DataFrame([])
+
+        try:
+            # put in df
+            dc_pd = pd.DataFrame(output, columns=columns)
+            # clean DB objects from df
+            badcols = []
+            for x in dc_pd.columns.tolist():
+                try:
+                    dc_pd[x].astype(str)
+                except Exception as error:
+                    self.logger.debug(f'error converting column {x} to string {error}')
+                    badcols.append(x)
+            dc_pd.drop(columns=badcols, inplace=True)
+            return dc_pd
+        except Exception as execpt_error:
+            self.logger.info(f'error framing data from dataconnect: {execpt_error}')
+            return pd.DataFrame([])
+
+    def mnt_data_retrival(self, resource):
+        mnt_sess = self.ers_mnt_ise_session()
+        mnt_result = mnt_sess.get(f'https://{self.ip}/admin/API/mnt/{resource}')
+        return mnt_result
+
+    def get_all_active_sessions(self) -> pd.DataFrame:
+        self.logger.debug('Obtaining all active sessions')
+        galls = self.mnt_data_retrival("Session/ActiveList")
+        if galls.status_code == 200:
+            data_dict = xmlparse(galls.content)
+            df = pd.json_normalize(data_dict['activeList']['activeSession'])
+            return df
+        else:
+            self.logger.info('No active sessions found in results!')
+            return pd.DataFrame([])
+
+    def get_all_profiler_count(self):
+        self.logger.debug('Obtaining active profile count')
+        gapc = self.mnt_data_retrival("Session/ProfilerCount")
+        if gapc.status_code == 200:
+            data_dict = xmlparse(gapc.content)
+            profiler_count = int(data_dict['sessionCount']['count'])
+            return profiler_count
+        self.logger.info('No active Profiles found in results!')
+        return 0
+
     def get_all_endpoint_data(self):
-        endpoints = []
-        step_page = 1
-        control_size = 500
-        while True:
-            # step thru endpoint pages
-            search_field = f'status=CONTEXT_EXTACT_MATCH_connected' \
-                           f'&columns=' \
-                           f'&sortBy=MACAddress' \
-                           f'&startAt={step_page}' \
-                           f'&pageSize={control_size}' \
-                           f'&total_pages=5000' \
-                           f'&total_entries={control_size}'
-            if not bool(self.config.get('only_connected')):
-                search_field = search_field.replace('status=CONTEXT_EXTACT_MATCH_connected&', '')
+        get_all_endpoints = "select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
+        ep_all = self.dataconnect_engine(get_all_endpoints)
 
-            # change header for search params
-            header = self.HEADER_DATA.copy()
-            header['_QPH_'] = self.UTILS.encode_data(search_field)
-            response = self.session.get(f'https://{self.ip}/admin/rs/uiapi/visibility', headers=header)
+        ep_active = self.get_all_active_sessions()
+        if any([ep_active.empty]):
+            self.logger.critical(f'No active posture or Posture sessions found!')
+            raise ValueError(f'No active posture or Posture sessions found!')
 
-            if response.status_code == 200:
-                ep_data = response.json()
-                if len(ep_data) > 0:
-                    endpoints = endpoints + ep_data
-                    step_page += 1
-                else:
-                    break
-            else:
-                self.logger.critical(f'received HTTP CODE {response.status_code} terminating')
-                raise RuntimeError
+        # normalize
+        ep_active = self.UTILS.normalize_df(ep_active)
+        ep_all = self.UTILS.drop_clean_df(ep_all)
+        # conversion needs to happen after the NaNs are dropped
+        ep_all = self.UTILS.normalize_df(ep_all)
+        # only get connected
+        if bool(self.config.get('only_connected')):
+            ep_act_list = ep_active['calling_station_id'].tolist()
+            endpoints = ep_all[ep_all['mac_address'].isin(ep_act_list)]
+        else:
+            endpoints = ep_all
 
-        # clean list and transform json str to dicts to load into DF
-        endpoints = list(set(endpoints))
-        endpoints = [json.loads(epd) for epd in endpoints]
-        self.logger.info(f'Gathered {len(endpoints)} endpoints from ISE')
-        self.endpoints = pd.DataFrame(endpoints)
+        self.logger.info(f'Gathered {endpoints.shape[0]} endpoints from ISE')
+        self.endpoints = endpoints
+        return
 
     def get_endpoint_data(self, mac_address,pbar_func=None):
         self.logger.debug(f'spawning new process for endpoint_data on {getpid()}')
@@ -188,18 +260,11 @@ class ISE:
 
     def get_license_info(self):
         self.logger.debug('Collecting primary node SN')
-        header = self.HEADER_DATA.copy()
-
-        license_field = 'command=loadSlConfigDetail&dojo.preventCache=1664971537253'
-        header['_QPH_'] = self.UTILS.encode_data(license_field)
-        header['Content-Type'] = 'application/x-www-form-urlencoded'
-
-        response = self.session.get(f'https://{self.ip}/admin/licenseAction.do', headers=header)
-        if response.status_code == 200:
-            license_data = response.json()
-            self.logger.info('Obtained Device Serial Number')
-            return license_data['serialNo']
-        self.logger.debug(f'Could not obtain primary node SN - Received HTTP status code:{str(response.status_code)}')
+        deployment_data = 'select HOSTNAME,NODE_TYPE,UDI_SN,ACTIVE_STATUS from NODE_LIST'
+        node_info = self.dataconnect_engine(deployment_data)
+        sn_data = node_info['UDI_SN'][(node_info['ACTIVE_STATUS'] == 'ACTIVE') & (node_info['NODE_TYPE'].str.contains('MNT'))].iloc[0]
+        self.logger.info('Obtained Device Serial Number')
+        return sn_data
 
     def get_endpoint_software_info(self):
         # applications data
@@ -222,7 +287,7 @@ class ISE:
                           'sortBy=MACAddress&' \
                           'startAt=1&' \
                           'pageSize=10&' \
-                          'total_pages=1&' \
+                          'total_pages=5000&' \
                           'total_entries=1'
 
         # transform to base64 then into the str representation of it
@@ -262,24 +327,27 @@ class ISE:
         self.logger.info('Endpoint special data collection complete')
 
     def join_hw_data(self):
-        try:
-            ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
-        except Exception as error:
-            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
-            self.logout_ise_session()
-            return
-        hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
-        hw_data = pd.DataFrame(hw_data)
-        # conform hw data to match self endpoints so we can merge them
-        hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
-        # since we might not have anything in the df lets error check and if it doesnt skip hw processing
-        try:
-            hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
-            self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
-            self.endpoints.replace({None: 'unknown'}, inplace=True)
-        except Exception as error:
-            self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
-            return
+        pass
+        # # todo: will fix later if needed
+        # # try:
+        #     ep_name = self.endpoints['Calling-Station-ID'][self.endpoints['PostureReport'] != 'unknown'].tolist()
+        # except Exception as error:
+        #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+        #     self.logout_ise_session()
+        #
+        #     return
+        # hw_data = [self.get_endpoint_hardware_info(i.replace('-',':'),high_level=True) for i in ep_name]
+        # hw_data = pd.DataFrame(hw_data)
+        # # conform hw data to match self endpoints so we can merge them
+        # hw_data.rename(columns={'MACAddress':'Calling-Station-ID'},inplace=True)
+        # # since we might not have anything in the df lets error check and if it doesnt skip hw processing
+        # try:
+        #     hw_data['Calling-Station-ID'] = hw_data['Calling-Station-ID'].apply(lambda x: x.replace(':','-'))
+        #     self.endpoints = pd.concat([self.endpoints, hw_data], axis=1)
+        #     self.endpoints.replace({None: 'unknown'}, inplace=True)
+        # except Exception as error:
+        #     self.logger.exception(f'somethings wrong with the dataframe....:\n {error} \n\n QUITING')
+        # #     return
 
     def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
         raw_df.drop(columns=filter_list, inplace=True)
@@ -301,6 +369,7 @@ class ISE:
         return raw_df
 
     def retrieve_endpoint_data(self):
+        # todo: need to fix with updated code
         # deployment ID
         self.sn = self.get_license_info()
         self.endpoint_policies = None
@@ -311,17 +380,11 @@ class ISE:
             self.logger.info(f'Sample Size of {self.config.get("test_endpoint_pull")} Endpoints being used.')
             self.endpoints = self.endpoints.loc[:self.config.get('test_endpoint_pull')]
 
-        # since we dont need that much info in step 1 just pull the logical profile else pull all data
-        if self.config['EndpointData']['step'] == 1:
-            self.get_metadata_from_endpoints(specific='LogicalProfile')
-        elif self.config['EndpointData']['step'] == 2:
-            self.get_metadata_from_endpoints()
-            # need to get hardware serials also
-            self.join_hw_data()
         # since ISE doesn't de-conflict logical profiles when two logical profiles are assigned to the same endpoint, take the first res. for more see FAQ
-        self.endpoints['LogicalProfile'] = self.endpoints['LogicalProfile'].apply(lambda x: x.split(',')[0])
         self.logger.info('Endpoint data collection complete')
         self.logout_ise_session()
+
+
 
 
 if __name__ == '__main__':
