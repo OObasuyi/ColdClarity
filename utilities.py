@@ -5,6 +5,7 @@ from os import path, makedirs, rename, remove, replace,walk
 from urllib.parse import quote as url_quote
 from io import StringIO
 import yaml
+from re import sub
 
 import logging
 
@@ -78,11 +79,21 @@ class Rutils:
         df.reset_index(drop=True, inplace=True)
         return df
 
-    @staticmethod
-    def normalize_df(df):
+    def normalize_df(self,df):
         df.columns = df.columns.str.lower()
         df = df.astype(str).apply(lambda x: x.str.lower())
+        for col in df.columns:
+            if 'mac' or 'calling_station_id' in col:
+                df[col] = df[col].apply(self.mac_normalizer)
         return df
+
+    @staticmethod
+    def mac_normalizer(df_str):
+        clean_mac = sub(r'[^A-Fa-f0-9]', '', df_str)
+        if len(clean_mac) == 12:
+            return ':'.join(clean_mac[i:i + 2] for i in range(0, 12, 2))
+        else:
+            return df_str
 
 
 def log_collector(log_all=False,file_name='ise_reporting_logs.log'):

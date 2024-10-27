@@ -104,10 +104,12 @@ class ISEReport:
         get_all_posture_endpoints = "select * from posture_assessment_by_condition"
         get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
         get_web_auths = "select MAC_ADDRESS,PORTAL_USER from ENDPOINTS_DATA"
+        get_all_endpoints = "select MAC_ADDRESS from ENDPOINTS_DATA"
 
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
         ep_auths = self.ise.dataconnect_engine(get_all_auths)
         ep_web = self.ise.dataconnect_engine(get_web_auths)
+        ep_all = self.ise.dataconnect_engine(get_all_endpoints)
 
         ep_active = self.ise.get_all_active_sessions()
         ep_profiled_count = self.ise.get_all_profiler_count()
@@ -122,21 +124,28 @@ class ISEReport:
 
         ep_auths = self.utils.drop_clean_df(ep_auths)
         ep_web = self.utils.drop_clean_df(ep_web)
+        ep_all = self.utils.drop_clean_df(ep_all)
         # conversion needs to happen after the NaNs are dropped
         ep_auths = self.utils.normalize_df(ep_auths)
         ep_web = self.utils.normalize_df(ep_web)
+        ep_all = self.utils.normalize_df(ep_all)
 
         # grouped postured endpoints
         grouped_posture_macs = ep_postured.groupby('endpoint_id')
+        # grouped_posture_macs.size().shape[0]
+        # postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
+        # active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
 
-        # total active endpoints
-        writer.writerow(['Total Discovered Endpoints', ep_active.shape[0]])
-        # devices that can posture
-        writer.writerow(['Total Managed Endpoints', grouped_posture_macs.size().shape[0]])
-        # device that cant posture but are connected
-        postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
-        active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
-        writer.writerow(['Total Non-Managed Endpoints', active_non_postured.shape[0]])
+        # All endpoints in ISE
+        writer.writerow(['Total Discovered Endpoints', ep_all.shape[0]])
+        # endpoints that auth'd at some point
+        all_macs = ep_all['mac_address'].tolist()
+        tot_man_ep = ep_auths[ep_auths['orig_calling_station_id'].isin(all_macs)].drop_duplicates(subset='orig_calling_station_id', keep='first')
+        writer.writerow(['Total Managed Endpoints', tot_man_ep.shape[0]])
+        # device that has been seen via nMAP or whatever that hasnt auth'd
+        all_auths = ep_auths['orig_calling_station_id'].tolist()
+        tot_non_man_ep = ep_all[~ep_all['mac_address'].isin(all_auths)].drop_duplicates(subset='mac_address', keep='first')
+        writer.writerow(['Total Non-Managed Endpoints', tot_non_man_ep.shape[0]])
         # devices that can auth via 8021.x
         writer.writerow(['Total 802.1X Endpoints', ep_active[ep_active['user_name'] != ep_active['calling_station_id']].shape[0]])
         # devices that are MAB
@@ -169,7 +178,7 @@ class ISEReport:
         writer.writerow(['Total Workstations and Servers', wrk_svr_data.shape[0]])
         # wrk/svrs not/are in posture
         writer.writerow(['Unmanaged Workstations and Servers', wrk_svr_data[wrk_svr_data["devicecompliance"] == 'unknown'].shape[0]])
-        writer.writerow(['Managed Workstations and Servers', wrk_svr_data[wrk_svr_data["devicecompliance"] != 'unknown'].shape[0]])
+        writer.writerow(['Managed Workstations and Servers', grouped_posture_macs.size().shape[0]])
 
         # reporting Break
         writer.writerow([])
