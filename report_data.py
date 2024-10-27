@@ -45,11 +45,11 @@ class ISEReport:
         #     self.create_ise_sw_hw_report(type_='hardware', hw_mac_list=workstation_mac_addrs)
         #
         # # change profile of custom profile to fit report standards if custom list exist
-        # if self.ise.config.get('custom_profiles_match') is not None:
-        #     custom_profiles_match = self.ise.config.get('custom_profiles_match')
-        #     # fold list of dicts to one list to use in df op
-        #     custom_profiles_match = {k: v for dict_item in custom_profiles_match for k, v in dict_item.items()}
-        #     ise_eps["EndPointPolicy"].replace(custom_profiles_match, inplace=True)
+        if self.ise.config.get('custom_profiles_match') is not None:
+            custom_profiles_match = self.ise.config.get('custom_profiles_match')
+            # fold list of dicts to one list to use in df op
+            custom_profiles_match = {k: v for dict_item in custom_profiles_match for k, v in dict_item.items()}
+            ise_eps["assigned_policies"].replace(custom_profiles_match, inplace=True)
 
         with open(fname, 'w+', newline='') as f:
             writer = csv.writer(f)
