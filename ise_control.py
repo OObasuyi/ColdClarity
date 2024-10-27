@@ -57,7 +57,7 @@ class ISE:
         self.ip = self.config['ise']['ip']
         # session information
         self.get_session()
-        self.init_ise_session()
+        # self.init_ise_session()
         self.step = self.config['EndpointData']['step']
 
     def get_session(self):

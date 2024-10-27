@@ -36,20 +36,20 @@ class ISEReport:
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
         # todo: replace this with the newer api!!!!
-        self.ise.retrieve_endpoint_data()
-        ise_eps = self.ise.endpoints.copy()
-
-        if incl_report_type == 'ep_attributes':
-            workstation_mac_addrs = ise_eps.loc[ise_eps['EndPointPolicy'].str.contains('Workstation')]['MACAddress'].to_list()
-            self.create_ise_sw_hw_report(type_='software')
-            self.create_ise_sw_hw_report(type_='hardware', hw_mac_list=workstation_mac_addrs)
-
-        # change profile of custom profile to fit report standards if custom list exist
-        if self.ise.config.get('custom_profiles_match') is not None:
-            custom_profiles_match = self.ise.config.get('custom_profiles_match')
-            # fold list of dicts to one list to use in df op
-            custom_profiles_match = {k: v for dict_item in custom_profiles_match for k, v in dict_item.items()}
-            ise_eps["EndPointPolicy"].replace(custom_profiles_match, inplace=True)
+        # self.ise.retrieve_endpoint_data()
+        # ise_eps = self.ise.endpoints.copy()
+        #
+        # if incl_report_type == 'ep_attributes':
+        #     workstation_mac_addrs = ise_eps.loc[ise_eps['EndPointPolicy'].str.contains('Workstation')]['MACAddress'].to_list()
+        #     self.create_ise_sw_hw_report(type_='software')
+        #     self.create_ise_sw_hw_report(type_='hardware', hw_mac_list=workstation_mac_addrs)
+        #
+        # # change profile of custom profile to fit report standards if custom list exist
+        # if self.ise.config.get('custom_profiles_match') is not None:
+        #     custom_profiles_match = self.ise.config.get('custom_profiles_match')
+        #     # fold list of dicts to one list to use in df op
+        #     custom_profiles_match = {k: v for dict_item in custom_profiles_match for k, v in dict_item.items()}
+        #     ise_eps["EndPointPolicy"].replace(custom_profiles_match, inplace=True)
 
         with open(fname, 'w+', newline='') as f:
             writer = csv.writer(f)
@@ -58,11 +58,12 @@ class ISEReport:
             writer.writerow([f'{self.reporting_name}-Reporting Information'])
             writer.writerow(['Owner: ' + self.ise.config['report']['owner']])
             writer.writerow(['Area of Operations: ' + self.ise.config['report']['area_of_operation']])
-            writer.writerow([f'Deployment ID:{self.ise.sn}'])
+            # writer.writerow([f'Deployment ID:{self.ise.sn}'])
             writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.0-MER-Information'])
             # logical profile summary
             if self.ise.step == 1:
-                self.ise_step_1(writer, ise_eps)
+                # self.ise_step_1(writer, ise_eps)
+                pass
             elif self.ise.step == 2:
                 self.ise_step_2(writer)
 
@@ -97,14 +98,16 @@ class ISEReport:
             posture_cons = posture_cons + extended_pos_cons
 
         # normalize df
-        step2_data = self.ise.endpoints.copy()
+        # step2_data = self.ise.endpoints.copy()
 
         # db queries
         get_all_posture_endpoints = "select * from posture_assessment_by_condition"
-        get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL from RADIUS_AUTHENTICATIONS"
+        get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
+        get_web_auths = "select MAC_ADDRESS,PORTAL_USER from ENDPOINTS_DATA"
 
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
         ep_auths = self.ise.dataconnect_engine(get_all_auths)
+        ep_web = self.ise.dataconnect_engine(get_web_auths)
 
         ep_active = self.ise.get_all_active_sessions()
         ep_profiled_count = self.ise.get_all_profiler_count()
@@ -114,19 +117,14 @@ class ISEReport:
             raise ValueError(f'No active posture or Posture sessions found!')
 
         # normalize
-        ep_active.columns = ep_active.columns.str.lower()
-        ep_active = ep_active.astype(str).apply(lambda x: x.str.lower())
+        ep_active = self.utils.normalize_df(ep_active)
+        ep_postured = self.utils.normalize_df(ep_postured)
 
-        ep_postured.columns = ep_postured.columns.str.lower()
-        ep_postured = ep_postured.astype(str).apply(lambda x: x.str.lower())
-
-        ep_auths.drop_duplicates(inplace=True)
-        ep_auths.dropna(inplace=True)
-        ep_auths.reset_index(drop=True, inplace=True)
-
-        ep_auths.columns = ep_auths.columns.str.lower()
+        ep_auths = self.utils.drop_clean_df(ep_auths)
+        ep_web = self.utils.drop_clean_df(ep_web)
         # conversion needs to happen after the NaNs are dropped
-        ep_auths = ep_auths.astype(str).apply(lambda x: x.str.lower())
+        ep_auths = self.utils.normalize_df(ep_auths)
+        ep_web = self.utils.normalize_df(ep_web)
 
         # grouped postured endpoints
         grouped_posture_macs = ep_postured.groupby('endpoint_id')
@@ -145,9 +143,10 @@ class ISEReport:
         writer.writerow(['Total MAB Endpoints', ep_active[ep_active['user_name'] == ep_active['calling_station_id']].shape[0]])
         # how many profiles we have
         writer.writerow(['Total Profiled Endpoints', ep_profiled_count])
-        # if we are doing webauth or some type of auth???
-        dif_auth_df = ep_auths[(ep_auths['authentication_method'] != 'mab') & (ep_auths['authentication_method'] != '8021.x')]
-        writer.writerow(['Total Authenticated Other (SNMP etc)', dif_auth_df.shape[0]])
+        # if we are doing webauth or some type of auth
+        web_list = ep_web['mac_address'].tolist()
+        other_auth = ep_active[ep_active['calling_station_id'].isin(web_list)]
+        writer.writerow(['Total Authenticated Other (SNMP etc)', other_auth.shape[0]])
 
         # reporting Break
         writer.writerow([])
@@ -158,8 +157,9 @@ class ISEReport:
         # how many user endpoints are reporting posture
         writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_ep.shape[0]])
         # how many are not
-        # todo: need to cross ref active ep and radius auths to see who is not doing posture for non-managed devices
-        writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_svr_ep[non_svr_ep["devicecompliance"] == 'unknown'].shape[0]])
+        non_man_list = ep_auths['orig_calling_station_id'][~ep_auths['endpoint_profile'].str.contains('server | red hat | rhel', regex=True) & ~ep_auths['posture_status'].str.contains('comp', regex=True)].tolist()
+        non_man_ep = ep_active[ep_active['calling_station_id'].isin(non_man_list)]
+        writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_man_ep.shape[0]])
 
         # reporting Break
         writer.writerow([])

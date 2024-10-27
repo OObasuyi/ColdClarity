@@ -71,6 +71,19 @@ class Rutils:
             df.to_csv(buffer,index=False)
             return buffer.getvalue()
 
+    @staticmethod
+    def drop_clean_df(df):
+        df.drop_duplicates(inplace=True)
+        df.dropna(inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        return df
+
+    @staticmethod
+    def normalize_df(df):
+        df.columns = df.columns.str.lower()
+        df = df.astype(str).apply(lambda x: x.str.lower())
+        return df
+
 
 def log_collector(log_all=False,file_name='ise_reporting_logs.log'):
     fName = Rutils().create_file_path('logging', file_name)
