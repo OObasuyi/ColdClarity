@@ -35,16 +35,10 @@ class ISEReport:
         # reg report
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
-        # todo: replace this with the newer api!!!!
         self.ise.retrieve_endpoint_data()
         ise_eps = self.ise.endpoints.copy()
-        #
-        # if incl_report_type == 'ep_attributes':
-        #     workstation_mac_addrs = ise_eps.loc[ise_eps['EndPointPolicy'].str.contains('Workstation')]['MACAddress'].to_list()
-        #     self.create_ise_sw_hw_report(type_='software')
-        #     self.create_ise_sw_hw_report(type_='hardware', hw_mac_list=workstation_mac_addrs)
-        #
-        # # change profile of custom profile to fit report standards if custom list exist
+
+        # change profile of custom profile to fit report standards if custom list exist
         if self.ise.config.get('custom_profiles_match') is not None:
             custom_profiles_match = self.ise.config.get('custom_profiles_match')
             # fold list of dicts to one list to use in df op
