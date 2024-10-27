@@ -36,8 +36,8 @@ class ISEReport:
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
         # pull ep data
         # todo: replace this with the newer api!!!!
-        # self.ise.retrieve_endpoint_data()
-        # ise_eps = self.ise.endpoints.copy()
+        self.ise.retrieve_endpoint_data()
+        ise_eps = self.ise.endpoints.copy()
         #
         # if incl_report_type == 'ep_attributes':
         #     workstation_mac_addrs = ise_eps.loc[ise_eps['EndPointPolicy'].str.contains('Workstation')]['MACAddress'].to_list()
@@ -58,11 +58,11 @@ class ISEReport:
             writer.writerow([f'{self.reporting_name}-Reporting Information'])
             writer.writerow(['Owner: ' + self.ise.config['report']['owner']])
             writer.writerow(['Area of Operations: ' + self.ise.config['report']['area_of_operation']])
-            writer.writerow([f'Deployment ID:{self.ise.get_license_info()}'])
+            writer.writerow([f'Deployment ID:{self.ise.sn}'])
             writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.0-MER-Information'])
             # logical profile summary
             if self.ise.step == 1:
-                # self.ise_step_1(writer, ise_eps)
+                self.ise_step_1(writer, ise_eps)
                 pass
             elif self.ise.step == 2:
                 self.ise_step_2(writer)
@@ -77,17 +77,18 @@ class ISEReport:
     def ise_step_1(self, writer, ise_eps):
         writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
         for cat in self.ise_summary_list:
-            logical_group = ise_eps[ise_eps['LogicalProfile'] == cat]
+            logical_group = ise_eps[ise_eps['logical_profile'] == cat]
             if not logical_group.empty:
                 writer.writerow([cat, logical_group.shape[0]])
             else:
                 writer.writerow([cat, 0])
         # endpoint policy summary
         writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.2 Operating System Summary', self.ise.endpoints.shape[0]])
-        grouped_eps = ise_eps.groupby(by=['EndPointPolicy'])
+        grouped_eps = ise_eps.groupby(by=['assigned_policies'])
         grouped_eps_names = list(grouped_eps.groups)
         for gp_name in grouped_eps_names:
             writer.writerow([gp_name, grouped_eps.get_group(gp_name).shape[0]])
+        return
 
     def ise_step_2(self, writer):
         # get Posture conditions
@@ -96,9 +97,6 @@ class ISEReport:
         extended_pos_cons = self.ise.config.get('step2_conditions_custom')
         if extended_pos_cons:
             posture_cons = posture_cons + extended_pos_cons
-
-        # normalize df
-        # step2_data = self.ise.endpoints.copy()
 
         common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
@@ -130,16 +128,6 @@ class ISEReport:
         ep_auths = self.utils.normalize_df(ep_auths)
         ep_all = self.utils.normalize_df(ep_all)
         ep_web = self.utils.normalize_df(ep_web)
-
-        # grouped postured endpoints
-        grouped_posture_macs = ep_postured.groupby('endpoint_id')
-
-        # grouped_posture_macs.size().shape[0]
-        # postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
-        # active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
-        # only get user endpoints
-        # only_wkst = ep_postured.drop_duplicates(subset='endpoint_os', keep='first')
-        # non_svr_ep = only_wkst[~only_wkst['endpoint_os'].str.contains('server | red hat | rhel', regex=True)]
 
         # All endpoints in ISE
         writer.writerow(['Total Discovered Endpoints', ep_all.shape[0]])
@@ -224,18 +212,6 @@ class ISEReport:
         # # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
         self.ise.logger.info("Finished all reports!")
         return
-
-    @staticmethod
-    def posture_report_spliter(x, get_policy):
-        # split by the conditions matched
-        posture_report = x.split(',')
-        # now split from con name to pass/fail
-        for i in posture_report:
-            # check if we have a policy match
-            if f'{get_policy}\\' in i:
-                # parse and return whether this device passed if not return not_applicable
-                return i.split(';')[1].strip('\\')
-        return 'not_applicable'
 
     def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
         # function import until we plop this on the devops server

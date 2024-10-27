@@ -125,7 +125,6 @@ class ISE:
         em_session.auth = HTTPBasicAuth(auth_info['ers_based']['username'], auth_info['ers_based']['password'])
         return em_session
 
-
     def logout_ise_session(self):
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
 
@@ -201,42 +200,29 @@ class ISE:
         return 0
 
     def get_all_endpoint_data(self):
-        endpoints = []
-        step_page = 1
-        control_size = 500
-        while True:
-            # step thru endpoint pages
-            search_field = f'status=CONTEXT_EXTACT_MATCH_connected' \
-                           f'&columns=' \
-                           f'&sortBy=MACAddress' \
-                           f'&startAt={step_page}' \
-                           f'&pageSize={control_size}' \
-                           f'&total_pages=5000' \
-                           f'&total_entries={control_size}'
-            if not bool(self.config.get('only_connected')):
-                search_field = search_field.replace('status=CONTEXT_EXTACT_MATCH_connected&', '')
+        get_all_endpoints = "select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
+        ep_all = self.dataconnect_engine(get_all_endpoints)
 
-            # change header for search params
-            header = self.HEADER_DATA.copy()
-            header['_QPH_'] = self.UTILS.encode_data(search_field)
-            response = self.session.get(f'https://{self.ip}/admin/rs/uiapi/visibility', headers=header)
+        ep_active = self.get_all_active_sessions()
+        if any([ep_active.empty]):
+            self.logger.critical(f'No active posture or Posture sessions found!')
+            raise ValueError(f'No active posture or Posture sessions found!')
 
-            if response.status_code == 200:
-                ep_data = response.json()
-                if len(ep_data) > 0:
-                    endpoints = endpoints + ep_data
-                    step_page += 1
-                else:
-                    break
-            else:
-                self.logger.critical(f'received HTTP CODE {response.status_code} terminating')
-                raise RuntimeError
+        # normalize
+        ep_active = self.UTILS.normalize_df(ep_active)
+        ep_all = self.UTILS.drop_clean_df(ep_all)
+        # conversion needs to happen after the NaNs are dropped
+        ep_all = self.UTILS.normalize_df(ep_all)
+        # only get connected
+        if bool(self.config.get('only_connected')):
+            ep_act_list = ep_active['calling_station_id'].tolist()
+            endpoints = ep_all[ep_all['mac_address'].isin(ep_act_list)]
+        else:
+            endpoints = ep_all
 
-        # clean list and transform json str to dicts to load into DF
-        endpoints = list(set(endpoints))
-        endpoints = [json.loads(epd) for epd in endpoints]
-        self.logger.info(f'Gathered {len(endpoints)} endpoints from ISE')
-        self.endpoints = pd.DataFrame(endpoints)
+        self.logger.info(f'Gathered {endpoints.shape[0]} endpoints from ISE')
+        self.endpoints = endpoints
+        return
 
     def get_endpoint_data(self, mac_address,pbar_func=None):
         self.logger.debug(f'spawning new process for endpoint_data on {getpid()}')
@@ -275,7 +261,6 @@ class ISE:
     def get_license_info(self):
         self.logger.debug('Collecting primary node SN')
         deployment_data = 'select HOSTNAME,NODE_TYPE,UDI_SN,ACTIVE_STATUS from NODE_LIST'
-
         node_info = self.dataconnect_engine(deployment_data)
         sn_data = node_info['UDI_SN'][(node_info['ACTIVE_STATUS'] == 'ACTIVE') & (node_info['NODE_TYPE'].str.contains('MNT'))].iloc[0]
         self.logger.info('Obtained Device Serial Number')
@@ -384,6 +369,7 @@ class ISE:
         return raw_df
 
     def retrieve_endpoint_data(self):
+        # todo: need to fix with updated code
         # deployment ID
         self.sn = self.get_license_info()
         self.endpoint_policies = None
@@ -394,15 +380,7 @@ class ISE:
             self.logger.info(f'Sample Size of {self.config.get("test_endpoint_pull")} Endpoints being used.')
             self.endpoints = self.endpoints.loc[:self.config.get('test_endpoint_pull')]
 
-        # since we dont need that much info in step 1 just pull the logical profile else pull all data
-        if self.config['EndpointData']['step'] == 1:
-            self.get_metadata_from_endpoints(specific='LogicalProfile')
-        elif self.config['EndpointData']['step'] == 2:
-            self.get_metadata_from_endpoints()
-            # need to get hardware serials also
-            self.join_hw_data()
         # since ISE doesn't de-conflict logical profiles when two logical profiles are assigned to the same endpoint, take the first res. for more see FAQ
-        self.endpoints['LogicalProfile'] = self.endpoints['LogicalProfile'].apply(lambda x: x.split(',')[0])
         self.logger.info('Endpoint data collection complete')
         self.logout_ise_session()
 
