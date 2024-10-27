@@ -100,15 +100,16 @@ class ISEReport:
         # normalize df
         # step2_data = self.ise.endpoints.copy()
 
+        common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
         get_all_posture_endpoints = "select * from posture_assessment_by_condition"
         get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
-        get_web_auths = "select MAC_ADDRESS,PORTAL_USER from ENDPOINTS_DATA"
-        get_all_endpoints = "select MAC_ADDRESS from ENDPOINTS_DATA"
+        get_all_endpoints ="select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
+        get_portal_endpoints ="select MAC_ADDRESS, PORTAL_USER from ENDPOINTS_DATA"
 
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
         ep_auths = self.ise.dataconnect_engine(get_all_auths)
-        ep_web = self.ise.dataconnect_engine(get_web_auths)
+        ep_web = self.ise.dataconnect_engine(get_portal_endpoints)
         ep_all = self.ise.dataconnect_engine(get_all_endpoints)
 
         ep_active = self.ise.get_all_active_sessions()
@@ -121,29 +122,32 @@ class ISEReport:
         # normalize
         ep_active = self.utils.normalize_df(ep_active)
         ep_postured = self.utils.normalize_df(ep_postured)
+        ep_web = self.utils.normalize_df(ep_web)
 
         ep_auths = self.utils.drop_clean_df(ep_auths)
-        ep_web = self.utils.drop_clean_df(ep_web)
         ep_all = self.utils.drop_clean_df(ep_all)
         # conversion needs to happen after the NaNs are dropped
         ep_auths = self.utils.normalize_df(ep_auths)
-        ep_web = self.utils.normalize_df(ep_web)
         ep_all = self.utils.normalize_df(ep_all)
+        ep_web = self.utils.normalize_df(ep_web)
 
         # grouped postured endpoints
         grouped_posture_macs = ep_postured.groupby('endpoint_id')
         # grouped_posture_macs.size().shape[0]
         # postured_macs = ep_postured['endpoint_id'].drop_duplicates().tolist()
         # active_non_postured = ep_active[~ep_active['calling_station_id'].isin(postured_macs)]
+        # only get user endpoints
+        # only_wkst = ep_postured.drop_duplicates(subset='endpoint_os', keep='first')
+        # non_svr_ep = only_wkst[~only_wkst['endpoint_os'].str.contains('server | red hat | rhel', regex=True)]
 
         # All endpoints in ISE
         writer.writerow(['Total Discovered Endpoints', ep_all.shape[0]])
         # endpoints that auth'd at some point
-        all_macs = ep_all['mac_address'].tolist()
+        all_macs = ep_all['mac_address'].drop_duplicates().tolist()
         tot_man_ep = ep_auths[ep_auths['orig_calling_station_id'].isin(all_macs)].drop_duplicates(subset='orig_calling_station_id', keep='first')
         writer.writerow(['Total Managed Endpoints', tot_man_ep.shape[0]])
         # device that has been seen via nMAP or whatever that hasnt auth'd
-        all_auths = ep_auths['orig_calling_station_id'].tolist()
+        all_auths = ep_auths['orig_calling_station_id'].drop_duplicates().tolist()
         tot_non_man_ep = ep_all[~ep_all['mac_address'].isin(all_auths)].drop_duplicates(subset='mac_address', keep='first')
         writer.writerow(['Total Non-Managed Endpoints', tot_non_man_ep.shape[0]])
         # devices that can auth via 8021.x
@@ -153,32 +157,35 @@ class ISEReport:
         # how many profiles we have
         writer.writerow(['Total Profiled Endpoints', ep_profiled_count])
         # if we are doing webauth or some type of auth
-        web_list = ep_web['mac_address'].tolist()
+        web_list = ep_web['mac_address'][ep_web['portal_user'] != 'none'].tolist()
         other_auth = ep_active[ep_active['calling_station_id'].isin(web_list)]
         writer.writerow(['Total Authenticated Other (SNMP etc)', other_auth.shape[0]])
 
         # reporting Break
         writer.writerow([])
 
-        # only get user endpoints
-        only_wkst = ep_postured.drop_duplicates(subset='endpoint_os', keep='first')
-        non_svr_ep = only_wkst[~only_wkst['endpoint_os'].str.contains('server | red hat | rhel', regex=True)]
-        # how many user endpoints are reporting posture
-        writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_ep.shape[0]])
+        auth_ep_list = ep_active['calling_station_id'].drop_duplicates().tolist()
+        non_svr_auth_list = ep_all[ep_all['mac_address'].isin(auth_ep_list) & ~ep_all['assigned_policies'].str.contains(common_computing_profiles, regex=True)]
+        # how many IoT devices are auth'd
+        writer.writerow(['Non-svr/Wkstn Managed Devices', non_svr_auth_list.shape[0]])
         # how many are not
-        non_man_list = ep_auths['orig_calling_station_id'][~ep_auths['endpoint_profile'].str.contains('server | red hat | rhel', regex=True) & ~ep_auths['posture_status'].str.contains('comp', regex=True)].tolist()
-        non_man_ep = ep_active[ep_active['calling_station_id'].isin(non_man_list)]
-        writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_man_ep.shape[0]])
+        non_svr_all = ep_all['mac_address'][~ep_all['assigned_policies'].str.contains(common_computing_profiles, regex=True)].drop_duplicates().tolist()
+        non_svr_nonauth_list = ep_active[ep_active['calling_station_id'].isin(non_svr_all)]
+        writer.writerow(['Non-svr/Wkstn Non-Managed Devices', non_svr_nonauth_list.shape[0]])
 
         # reporting Break
         writer.writerow([])
 
         # just all logically profiled Workstation and Servers
-        wrk_svr_data = step2_data[step2_data['logicalprofile'] == 'workstations and servers']
+        wrk_svr_data = ep_all[ep_all['logical_profile'] == 'workstations and servers'].drop_duplicates(subset='mac_address', keep='first')
         writer.writerow(['Total Workstations and Servers', wrk_svr_data.shape[0]])
-        # wrk/svrs not/are in posture
-        writer.writerow(['Unmanaged Workstations and Servers', wrk_svr_data[wrk_svr_data["devicecompliance"] == 'unknown'].shape[0]])
-        writer.writerow(['Managed Workstations and Servers', grouped_posture_macs.size().shape[0]])
+        # wrk/svrs not doing auth
+        svr_all = ep_all['mac_address'][ep_all['assigned_policies'].str.contains(common_computing_profiles, regex=True)].drop_duplicates().tolist()
+        svr_non_auth = ep_active[~ep_active['calling_station_id'].isin(svr_all)]
+        writer.writerow(['Unmanaged Workstations and Servers', svr_non_auth.shape[0]])
+        # wrk/svrs doing auth
+        svr_auth = ep_active[ep_active['calling_station_id'].isin(svr_all)]
+        writer.writerow(['Managed Workstations and Servers', svr_auth.shape[0]])
 
         # reporting Break
         writer.writerow([])
