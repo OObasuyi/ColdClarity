@@ -287,7 +287,7 @@ class ISE:
                           'sortBy=MACAddress&' \
                           'startAt=1&' \
                           'pageSize=10&' \
-                          'total_pages=5000&' \
+                          'total_pages=1&' \
                           'total_entries=1'
 
         # transform to base64 then into the str representation of it
