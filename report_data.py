@@ -28,6 +28,7 @@ class ISEReport:
     def create_ise_endpoint_report(self):
 
         # special reports
+        # todo: need to work on SW next then special reporting
         if self.ise.config.get('special_reporting').get('use'):
             self.create_special_reporting()
             quit()
