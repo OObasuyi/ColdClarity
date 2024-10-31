@@ -25,7 +25,7 @@ class ISEReport:
         # get title of the report
         self.reporting_name = self.ise.config["report"]["program name"]
 
-    def create_ise_endpoint_report(self, incl_report_type=None):
+    def create_ise_endpoint_report(self):
 
         # special reports
         if self.ise.config.get('special_reporting').get('use'):
