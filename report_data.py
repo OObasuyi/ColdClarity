@@ -25,7 +25,7 @@ class ISEReport:
         # get title of the report
         self.reporting_name = self.ise.config["report"]["program name"]
 
-    def create_ise_endpoint_report(self, incl_report_type=None):
+    def create_ise_endpoint_report(self):
 
         # special reports
         if self.ise.config.get('special_reporting').get('use'):
@@ -42,7 +42,7 @@ class ISEReport:
         if self.ise.config.get('custom_profiles_match') is not None:
             custom_profiles_match = self.ise.config.get('custom_profiles_match')
             # fold list of dicts to one list to use in df op
-            custom_profiles_match = {k: v for dict_item in custom_profiles_match for k, v in dict_item.items()}
+            custom_profiles_match = {k.lower(): v.lower() for dict_item in custom_profiles_match for k, v in dict_item.items()}
             ise_eps["assigned_policies"].replace(custom_profiles_match, inplace=True)
 
         with open(fname, 'w+', newline='') as f:
@@ -71,7 +71,7 @@ class ISEReport:
     def ise_step_1(self, writer, ise_eps):
         writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
         for cat in self.ise_summary_list:
-            logical_group = ise_eps[ise_eps['logical_profile'] == cat]
+            logical_group = ise_eps[ise_eps['logical_profile'] == cat.lower()]
             if not logical_group.empty:
                 writer.writerow([cat, logical_group.shape[0]])
             else:
@@ -197,13 +197,9 @@ class ISEReport:
                 writer.writerow([f'{report_name} Non-Compliant', total_failed])
 
         # collect bios serials and sum
-        # todo: need more eps to test
-        # serial_collector = 0
-        # serial_list = ep_postured['endpoint_id'].drop_duplicates().tolist()
-        # for mac in serial_list:
-        #     serial_data = self.ise.get_endpoint_hardware_info(mac,high_level=True)
-        #     pass
-        # # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
+        hw_data = self.ise.get_endpoint_hardware_info()
+        hw_data = self.utils.normalize_df(hw_data)
+        writer.writerow(['Serial Number Collected', hw_data[hw_data['serialnum'] != 'unknown'].shape[0]])
         self.ise.logger.info("Finished all reports!")
         return
 
