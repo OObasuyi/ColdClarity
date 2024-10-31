@@ -197,13 +197,9 @@ class ISEReport:
                 writer.writerow([f'{report_name} Non-Compliant', total_failed])
 
         # collect bios serials and sum
-        # todo: need more eps to test
-        serial_collector = 0
-        serial_list = ep_postured['endpoint_id'].drop_duplicates().tolist()
-        for mac in serial_list:
-            serial_data = self.ise.get_endpoint_hardware_info(mac,high_level=True)
-            pass
-        # writer.writerow(['Serial Number Collected', step2_data[step2_data['serial number'] != 'unknown'].shape[0]])
+        hw_data = self.ise.get_endpoint_hardware_info()
+        hw_data = self.utils.normalize_df(hw_data)
+        writer.writerow(['Serial Number Collected', hw_data[hw_data['serialnum'] != 'unknown'].shape[0]])
         self.ise.logger.info("Finished all reports!")
         return
 

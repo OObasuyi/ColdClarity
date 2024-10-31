@@ -11,6 +11,8 @@ def term_access():
 
     c2r = ISEReport(config_file=args.config_file)
     c2r.create_ise_endpoint_report()
+    c2r.ise.logout_ise_session()
+
 
 if __name__ == '__main__':
     term_access()
