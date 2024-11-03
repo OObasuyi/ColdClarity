@@ -4,11 +4,9 @@ import json
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
-from tqdm import tqdm
 
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
-from os import getpid
 from ssl import create_default_context, CERT_NONE
 from xmltodict import parse as xmlparse
 import oracledb
@@ -135,7 +133,7 @@ class ISE:
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
         return
 
-    def dataconnect_engine(self,sql_string) -> pd.DataFrame:
+    def dataconnect_engine(self, sql_string) -> pd.DataFrame:
         # skip Oracle Server Cert Validation
         db_ssl_context = create_default_context()
         db_ssl_context.check_hostname = False
@@ -152,11 +150,15 @@ class ISE:
                 port=2484,
                 ssl_context=db_ssl_context
             )
-            # get info from DB
+            # get as many rows as possible on a trip but dont overload mem if we dont have any 10K should be good size for the max amount from a query
+            # https://oracle.github.io/python-oracledb/samples/tutorial/Python-and-Oracle-Database-The-New-Wave-of-Scripting.html#fetching
             cursor = connection.cursor()
+            cursor.prefetchrows = 10001
+            cursor.arraysize = 10000
+            # get info from DB
             cursor.execute(sql_string)
             columns = [desc[0] for desc in cursor.description]
-            output = cursor.fetchall()
+            data = cursor.fetchall()
             cursor.close()
             connection.close()
         except Exception as execpt_error:
@@ -165,8 +167,8 @@ class ISE:
 
         try:
             # put in df
-            dc_pd = pd.DataFrame(output, columns=columns)
-            # clean DB objects from df
+            dc_pd = pd.DataFrame(data, columns=columns)
+            # clean DB objects from df that cant be converted to STR type
             badcols = []
             for x in dc_pd.columns.tolist():
                 try:
@@ -191,14 +193,19 @@ class ISE:
         galls = self.mnt_data_retrival("Session/ActiveList")
         if galls.status_code == 200:
             data_dict = xmlparse(galls.content)
-            df = pd.json_normalize(data_dict['activeList']['activeSession'])
-            self.logger.debug(f'{df.shape[0]} Active Sessions Obtained')
-            return df
+            # if we have active sessions
+            if bool(data_dict['activeList'].get('activeSession')):
+                df = pd.json_normalize(data_dict['activeList']['activeSession'])
+                self.logger.debug(f'{df.shape[0]} Active Sessions Obtained')
+                return df
+            else:
+                self.logger.critical(f'NO active sessions found...')
+                return pd.DataFrame([])
         else:
-            self.logger.critical('No active sessions found in results!')
+            self.logger.critical(f'received back response code {galls.status_code} CANNOT PROCESS ACTIVE SESSIONS ')
             return pd.DataFrame([])
 
-    def get_all_profiler_count(self):
+    def get_all_profiler_count(self) -> int:
         self.logger.debug('Obtaining active profile count')
         gapc = self.mnt_data_retrival("Session/ProfilerCount")
         if gapc.status_code == 200:
@@ -242,15 +249,25 @@ class ISE:
         self.logger.debug('Obtained Serial Number')
         return sn_data
 
-    def get_endpoint_software_info(self):
+    def get_endpoint_software_info(self) -> pd.DataFrame:
         # applications data
-        host_sw = 'pageType=app&columns=productName%2Cversion%2CvendorName%2Ccategories%2CoperatingSystem%2CnoOfDevicesPerApp&sortBy=productName&startAt=1&pageSize=10000'
+        header_data = f'pageType=app&' \
+                      f'columns=productName%2C' \
+                      f'version%2C' \
+                      f'vendorName%2C' \
+                      f'categories%2C' \
+                      f'operatingSystem%2C' \
+                      f'noOfDevicesPerApp&' \
+                      f'sortBy=productName&' \
+                      f'startAt=1&' \
+                      f'pageSize=10000'
+
         # transform to base64 then into the str representation of it
-        host_sw = base64.b64encode(str.encode(host_sw)).decode('utf-8')
+        header_data = base64.b64encode(str.encode(header_data)).decode('utf-8')
         # session cookie are persistence so only need to add this header that was implemented from the JS caller
-        headers = {'_QPH_': host_sw}
+        headers = {'_QPH_': header_data}
         url = f"https://{self.ip}/admin/rs/uiapi/visibility"
-        self.sw_catalog = self.session.get(url, headers=headers)
+        sw_data = self.session.get(url, headers=headers)
         return
 
     def get_endpoint_hardware_info(self) -> pd.DataFrame:
@@ -337,7 +354,6 @@ class ISE:
         return raw_df
 
     def retrieve_endpoint_data(self):
-        # todo: need to fix with updated code
         # deployment ID
         self.sn = self.get_license_info()
         self.endpoint_policies = None
@@ -352,5 +368,7 @@ class ISE:
 
 if __name__ == '__main__':
     ise = ISE()
-    ise.retrieve_endpoint_data()
+    # ise.retrieve_endpoint_data()
+
+    ise.get_endpoint_software_info()
     ise.logout_ise_session()

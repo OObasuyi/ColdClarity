@@ -95,7 +95,7 @@ class ISEReport:
 
         common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
-        get_all_posture_endpoints = "select * from posture_assessment_by_condition"
+        get_all_posture_endpoints = "select POLICY,ENDPOINT_ID from posture_assessment_by_condition"
         get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
         get_all_endpoints ="select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
         get_portal_endpoints ="select MAC_ADDRESS, PORTAL_USER from ENDPOINTS_DATA"
