@@ -77,19 +77,10 @@ step2_conditions_custom:
   - usb: example_custom_policy_name
 
 
-# if you need a custom report thats already sitting in the repository server
+# if you need a custom report for just all cataloged software/hardware information
 special_reporting:
-  use: False
-  reporting_location: '/path/to/reports'
-  files_to_look_for: 
-    - 'test'
-  name_of_file_to_send: 'suff_to_send.csv'
-  filter_list: 
-    - 'useless Col data'
-  filter_specifics:
-    'ACCT_SESSION_TIME': 0
-    'AUTHENTICATION_RULE': 'Allow Guest Users'
-  get_attribute_from_endpoint: 'MAC ADDRESS' 
+  use: True
+  sr_type: 'hardware'
 
 # get all endpoints or just connected ones
 only_connected: True

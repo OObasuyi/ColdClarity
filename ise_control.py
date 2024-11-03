@@ -1,14 +1,11 @@
-import base64
 import json
 
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
-from tqdm import tqdm
 
 from utilities import Rutils, log_collector
 from requests_pkcs12 import Pkcs12Adapter
-from os import getpid
 from ssl import create_default_context, CERT_NONE
 from xmltodict import parse as xmlparse
 import oracledb
@@ -135,7 +132,7 @@ class ISE:
         self.session.get(f'https://{self.ip}/admin/logout.jsp')
         return
 
-    def dataconnect_engine(self,sql_string) -> pd.DataFrame:
+    def dataconnect_engine(self, sql_string) -> pd.DataFrame:
         # skip Oracle Server Cert Validation
         db_ssl_context = create_default_context()
         db_ssl_context.check_hostname = False
@@ -152,11 +149,15 @@ class ISE:
                 port=2484,
                 ssl_context=db_ssl_context
             )
-            # get info from DB
+            # get as many rows as possible on a trip but dont overload mem if we dont have any 10K should be good size for the max amount from a query
+            # https://oracle.github.io/python-oracledb/samples/tutorial/Python-and-Oracle-Database-The-New-Wave-of-Scripting.html#fetching
             cursor = connection.cursor()
+            cursor.prefetchrows = 10001
+            cursor.arraysize = 10000
+            # get info from DB
             cursor.execute(sql_string)
             columns = [desc[0] for desc in cursor.description]
-            output = cursor.fetchall()
+            data = cursor.fetchall()
             cursor.close()
             connection.close()
         except Exception as execpt_error:
@@ -165,8 +166,8 @@ class ISE:
 
         try:
             # put in df
-            dc_pd = pd.DataFrame(output, columns=columns)
-            # clean DB objects from df
+            dc_pd = pd.DataFrame(data, columns=columns)
+            # clean DB objects from df that cant be converted to STR type
             badcols = []
             for x in dc_pd.columns.tolist():
                 try:
@@ -191,14 +192,19 @@ class ISE:
         galls = self.mnt_data_retrival("Session/ActiveList")
         if galls.status_code == 200:
             data_dict = xmlparse(galls.content)
-            df = pd.json_normalize(data_dict['activeList']['activeSession'])
-            self.logger.debug(f'{df.shape[0]} Active Sessions Obtained')
-            return df
+            # if we have active sessions
+            if bool(data_dict['activeList'].get('activeSession')):
+                df = pd.json_normalize(data_dict['activeList']['activeSession'])
+                self.logger.debug(f'{df.shape[0]} Active Sessions Obtained')
+                return df
+            else:
+                self.logger.critical(f'NO active sessions found...')
+                return pd.DataFrame([])
         else:
-            self.logger.critical('No active sessions found in results!')
+            self.logger.critical(f'received back response code {galls.status_code} CANNOT PROCESS ACTIVE SESSIONS ')
             return pd.DataFrame([])
 
-    def get_all_profiler_count(self):
+    def get_all_profiler_count(self) -> int:
         self.logger.debug('Obtaining active profile count')
         gapc = self.mnt_data_retrival("Session/ProfilerCount")
         if gapc.status_code == 200:
@@ -242,23 +248,67 @@ class ISE:
         self.logger.debug('Obtained Serial Number')
         return sn_data
 
-    def get_endpoint_software_info(self):
-        # applications data
-        host_sw = 'pageType=app&columns=productName%2Cversion%2CvendorName%2Ccategories%2CoperatingSystem%2CnoOfDevicesPerApp&sortBy=productName&startAt=1&pageSize=10000'
-        # transform to base64 then into the str representation of it
-        host_sw = base64.b64encode(str.encode(host_sw)).decode('utf-8')
-        # session cookie are persistence so only need to add this header that was implemented from the JS caller
-        headers = {'_QPH_': host_sw}
-        url = f"https://{self.ip}/admin/rs/uiapi/visibility"
-        self.sw_catalog = self.session.get(url, headers=headers)
-        return
+    def get_endpoint_software_info(self) -> pd.DataFrame:
+        endpoints = []
+        step_page = 1
+        control_size = 100
+
+        self.logger.info(f'Getting Collected software information')
+        sw_url = f"https://{self.ip}/admin/rs/uiapi/visibility"
+        while True:
+            header_data = f'pageType=app&' \
+                          f'columns=productName%2C' \
+                          f'version%2C' \
+                          f'vendorName%2C' \
+                          f'categories%2C' \
+                          f'operatingSystem%2C' \
+                          f'noOfDevicesPerApp&' \
+                          f'sortBy=productName&' \
+                          f'startAt={step_page}&' \
+                          f'pageSize={control_size}' \
+
+            # transform to base64 then into the str representation of it
+            header_data = self.UTILS.encode_data(header_data)
+            # session cookie are persistence so only need to add this header that was implemented from the JS caller
+            header = self.HEADER_DATA.copy()
+            header['_QPH_'] = header_data
+            response = self.session.get(sw_url, headers=header)
+
+            if response.status_code == 200:
+                ep_data = response.json()
+                if len(ep_data) > 0:
+                    endpoints += ep_data
+                    step_page += 1
+                else:
+                    self.logger.critical(f'GESI: no HW data for endpoints on page {step_page}')
+                    break
+            else:
+                self.logger.debug(f'GESI: received back response code {response.status_code} on data retrieval')
+                break
+
+        # clean list and transform json str to dicts to load into DF
+        # check if anything in the list
+        if len(endpoints) > 0:
+            # ETL
+            sw_data = pd.DataFrame(endpoints)
+            sw_data.drop(columns=['id','productId'], inplace=True)
+            sw_data.fillna('None', inplace=True)
+            sw_data.drop_duplicates(inplace=True)
+            sw_data.reset_index(drop=True, inplace=True)
+
+            self.logger.info(f'Gathered {sw_data.shape[0]} Types of SW')
+            self.logger.info('SW data collection complete')
+            return sw_data
+        else:
+            self.logger.critical(f'GESI: no software data gathered from ISE')
+            return pd.DataFrame([])
 
     def get_endpoint_hardware_info(self) -> pd.DataFrame:
         endpoints = []
         step_page = 1
         control_size = 100
 
-        self.logger.info(f'Getting endpoint hardware info')
+        self.logger.info(f'Getting Collected hardware information')
         url = f"https://{self.ip}/admin/rs/uiapi/hwvisibility"
         while True:
             # step thru endpoint pages
@@ -271,7 +321,7 @@ class ISE:
                           f'total_entries={control_size}'
 
             # transform to base64 then into the str representation of it
-            header_data = base64.b64encode(str.encode(header_data)).decode('utf-8')
+            header_data = self.UTILS.encode_data(header_data)
             # session cookie are persistence so only need to add this header that was implemented from the JS caller
             header = self.HEADER_DATA.copy()
             header['_QPH_'] = header_data
@@ -283,8 +333,11 @@ class ISE:
                     endpoints += ep_data
                     step_page += 1
                 else:
-                    self.logger.critical(f'no HW data for endpoints on page {step_page}')
+                    self.logger.critical(f'GEHI: no HW data for endpoints on page {step_page}')
                     break
+            else:
+                self.logger.debug(f'GEHI: received back response code {response.status_code} on data retrieval')
+                break
 
         # clean list and transform json str to dicts to load into DF
         endpoints = list(set(endpoints))
@@ -296,48 +349,10 @@ class ISE:
             self.logger.info('Endpoint HW data collection complete')
             return hw_data
         else:
-            self.logger.critical(f'no Hardware data gathered from ISE')
+            self.logger.critical(f'GEHI: no Hardware data gathered from ISE')
             return pd.DataFrame([])
 
-    def special_reporting_data(self):
-        special_rep = self.config['special_reporting']
-        reporting_location = special_rep.get('reporting_location')
-        find_files = special_rep.get('files_to_look_for')
-        filter_list = special_rep.get('filter_list')
-        special_items = special_rep.get('filter_specifics')
-        attr_to_look_for = special_rep.get('get_attribute_from_endpoint')
-        fnames = self.UTILS.get_files_from_loc(reporting_location, find_files)
-        # df holder
-        self.endpoints = pd.DataFrame([])
-        for f in fnames:
-            ep_df = pd.read_csv(f'{reporting_location}/{f}')
-            ep_df = self.filter_data(ep_df, filter_list, special_items)
-            self.endpoints = pd.concat([self.endpoints, ep_df], ignore_index=True)
-            self.UTILS.create_file_path('archive', f, parent_dir=reporting_location)
-        self.get_metadata_from_endpoints(attr_to_look_for)
-        self.logger.info('Endpoint special data collection complete')
-
-    def filter_data(self, raw_df: pd.DataFrame, filter_list: list, data_matching: dict = None):
-        raw_df.drop(columns=filter_list, inplace=True)
-        # if we have specifics we want to match on
-        if data_matching:
-            for k, v in data_matching.items():
-                # try to see if we fit a usecase if not keep going
-                try:
-                    raw_df = raw_df[raw_df[k].astype(int) > v]
-                    continue
-                except Exception as error:
-                    self.logger.debug(error)
-
-                try:
-                    raw_df = raw_df[raw_df[k].str.contains(v)]
-                    continue
-                except Exception as error:
-                    self.logger.debug(error)
-        return raw_df
-
     def retrieve_endpoint_data(self):
-        # todo: need to fix with updated code
         # deployment ID
         self.sn = self.get_license_info()
         self.endpoint_policies = None
@@ -352,5 +367,7 @@ class ISE:
 
 if __name__ == '__main__':
     ise = ISE()
-    ise.retrieve_endpoint_data()
-    ise.logout_ise_session()
+    # ise.retrieve_endpoint_data()
+    # ise.get_endpoint_software_info()
+    # ise.get_endpoint_hardware_info()
+    # ise.logout_ise_session()

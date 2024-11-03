@@ -1,9 +1,8 @@
 import csv
 import time
-from json import loads
 from os import path
+
 import pandas as pd
-from tqdm import tqdm
 
 from ise_control import ISE
 from messaging import Messaging
@@ -30,7 +29,7 @@ class ISEReport:
         # special reports
         if self.ise.config.get('special_reporting').get('use'):
             self.create_special_reporting()
-            quit()
+            return
 
         # reg report
         fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
@@ -67,6 +66,7 @@ class ISEReport:
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
+        return
 
     def ise_step_1(self, writer, ise_eps):
         writer.writerow([f'{self.reporting_name}-Step{self.ise.step}-2.1 {self.ise.config["report"]["prepared_for"]} Device Category', self.ise.endpoints.shape[0]])
@@ -94,7 +94,7 @@ class ISEReport:
 
         common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
-        get_all_posture_endpoints = "select * from posture_assessment_by_condition"
+        get_all_posture_endpoints = "select POLICY,ENDPOINT_ID from posture_assessment_by_condition"
         get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
         get_all_endpoints ="select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
         get_portal_endpoints ="select MAC_ADDRESS, PORTAL_USER from ENDPOINTS_DATA"
@@ -203,56 +203,32 @@ class ISEReport:
         self.ise.logger.info("Finished all reports!")
         return
 
-    def create_ise_sw_hw_report(self, type_='software', hw_mac_list: list = None):
-        # function import until we plop this on the devops server
-        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_step{self.ise.step}_{self.timestr}.csv')
-        vis = None
-        if type_ == 'software':
+    def ise_sw_hw_data(self, ware_type):
+        ware_data = None
+
+        # path creation
+        fname = self.utils.create_file_path('endpoint_reports', f'{self.ise.config["report"]["organization"]}_{ware_type.upper()}_{self.timestr}.csv')
+
+        if ware_type == 'software':
             self.ise.logger.info('Collecting Endpoint software information from ISE')
-            self.ise.get_endpoint_software_info()
-            vis = pd.DataFrame(loads(self.ise.sw_catalog.text))
-            vis.drop(columns=['id', 'productId'], inplace=True)
-        else:
+            ware_data = self.ise.get_endpoint_software_info()
+        elif ware_type == 'hardware':
             self.ise.logger.info('Collecting Endpoint hardware information from ISE')
-            hw_count = 0
-            hw_attr_list = []
-            if hw_mac_list is not None:
-                for hw_mac in tqdm(hw_mac_list, total=(len(hw_mac_list)), desc="Getting Hardware info from endpoints", colour='red'):
-                    hw_catalog = self.ise.get_endpoint_hardware_info(hw_mac)
-                    try:
-                        hw_catalog = loads(hw_catalog.text)
-                        if len(hw_catalog) < 1:
-                            # No Hardware Endpoint Data to report
-                            raise ValueError
-                        hw_count += 1
-                        for hwa in hw_catalog:
-                            hw_attr_list.append(hwa)
-                    except Exception as error:
-                        self.ise.logger.debug(f'CHWR: {error}')
-                        pass
-                # DONT KNOW WHAT THE FUCK IS THAT
-                # hw_attr_list = [dict(t) for t in {tuple(d.items()) for d in l}]
-                if len(hw_attr_list) < 1:
-                    self.ise.logger.error(f'No {type_} Data to Report')
-                    return
-                vis = pd.DataFrame(hw_attr_list)
-                vis['endpoint_count'] = hw_count
-                vis.drop(columns=['vendorId', 'productId'], inplace=True)
-        vis.to_csv(fname, index=False)
-        self.ise.logger.info(f'Endpoint {type_} Report Done! Saved to: {fname}')
+            ware_data = self.ise.get_endpoint_hardware_info()
+
+        ware_data.to_csv(fname, index=False)
+        self.ise.logger.info(f'{ware_type} Report Done! Saved to: {fname}')
+        return fname
+
+    def create_special_reporting(self):
+        self.ise.logger.info('Generating Special Reporting information from ISE')
+        fname = self.ise_sw_hw_data(ware_type=self.ise.config.get('special_reporting')['sr_type'])
         # send email
         if self.ise.config["report"]['send_email']:
             messager = Messaging(self.ise.config)
             messager.send_message(msg_attac_loc_or_buf=fname)
 
-    def create_special_reporting(self):
-        self.ise.special_reporting_data()
-        # send email
-        if self.ise.config["report"]['send_email']:
-            messager = Messaging(self.ise.config)
-            messager.send_message(msg_attac_loc_or_buf=self.ise.endpoints, attachment_name=self.ise.config['special_reporting']['name_of_file_to_send'])
-
 
 if __name__ == '__main__':
     c2r = ISEReport()
-    c2r.create_ise_endpoint_report(incl_report_type='None')
+    c2r.create_ise_endpoint_report()
