@@ -6,9 +6,13 @@ ColdClarity is a tool designed to see data gathered by Cisco ISE from your netwo
 ## Table of Contents
 - [Features](#Features)
 - [Configuration](#Configuration)
-- [General Report Settings](#General Report Settings) 
-- [Authentication Settings](#Authentication Settings)
-- [SMTP Configuration](#SMTP Configuration)
+  - [General Report Settings](#General-Report-Settings) 
+  - [Authentication Settings](#Authentication-Settings)
+  - [SMTP Configuration](#SMTP-Configuration)
+- [Usage](#usage)
+  - [Source](#Source)
+  - [Containers](#Containers)
+- [Troubleshooting](#troubleshooting)
 
 ## Features
 
@@ -47,3 +51,29 @@ smtp:
   destination_email_cc:
     - cc1@example.com
     - cc2@example.com
+```
+## usage
+### Source
+```shell
+# make sure you in the ColdClarity Dir. 
+# Also if the config YAML is in the current dir or the subdir Config_information you only need to specify the file name 
+# otherwise specify the complete PATH 
+python3.8 term_access.py --config_file config.yaml
+```
+### Containers
+```shell
+# you can use either docker or podman, but the following is created for podman.
+# you can also run it natively with out this script as its only if you want to ensure the app runs and exits properly 
+# one use-case for this is running this on a cron job in a environment where the app will not work natively
+# please edit the BASH file appropriately and give it the correct rights to run
+./cold_watcher.bash
+```
+
+## troubleshooting
+logs are created and placed in the logging directory on run, you can also use a do higher level debuging if you specify it in the `config.yaml` file 
+
+```yaml
+# DIAG
+test_messaging_svc: True # if you want to test pulling data without sending a email
+debug_console_login: ~ #outputs debug and higher to console
+```
