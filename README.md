@@ -1,61 +1,50 @@
-# Cold Clarity
+# ColdClarity 👁️ 🧊 👁️
+[![python](https://img.shields.io/badge/Python-3.9-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org) ![ISE Version](https://img.shields.io/badge/ISE-3.3-blue)
 
-Endpoint Reporting App for Identity Service Engine (ISE) 
-
-
+ColdClarity is a tool designed to see data gathered by Cisco ISE from your network. It generates reports based on customized configurations for compliance, device status, and more.
 
 ## Table of Contents
-- [Reporting](#Reporting)
-- [Templates](#Templates)
-- [FAQs](#FAQs) 
+- [Features](#Features)
+- [Configuration](#Configuration)
+- [General Report Settings](#General Report Settings) 
+- [Authentication Settings](#Authentication Settings)
+- [SMTP Configuration](#SMTP Configuration)
 - [Requirements](#Requirements)
 
-## Reporting
-### Using Source
-```shell
-# make sure you in the ColdClarity Dir. 
-# Also if the config YAML is in the current dir or the subdir Config_information you only need to specify the file name 
-# otherwise specify the complete PATH 
-python3.8 term_access.py --config_file config.yaml
-```
-### Using Containers
-```shell
-# you can use either docker or podman, but the following is created for podman.
-# you can also run it natively with out this script as its only if you want to ensure the app runs and exits properly 
-# one use-case for this is running this on a cron job in a environment where the app will not work natively
-# please edit the BASH file appropriately and give it the correct rights to run
-./cold_watcher.bash
-```
-## Templates
-### Generating ISE Certificates for Client Based Auth
-If you are using client based authentication for your ISE deployment AND YOU DONT have a client based Cert that ISE has a CA for, 
-please look at the `self.signed_cert.bash` in the templates DIR on general instructions on how it works with this APP and ISE
-```bash
-# running the script is simple please make you give it correct permission
-./self.signed_cert.bash
-```
-### Configuration YAML
-1. In the `report` section please fill it out with the information you have and make sure `send_email` is set to `true` 
-if you want to send this report automatically with the `prepared_for` specifying the receiver of the report. 
-2. In `authentication` specify whether you are using user/password or certificate based login
-3. If you are sending this report make sure your specify your mail relay settings.  
+## Features
 
+- **Configurable Reporting**: Supports HW/SW cataloging, endpoint profiles, and custom posture policies.
+- **Flexible Authentication**: Choose from certificate-based, text-based, and/or ERS-based authentication.
+- **Automated Email Notifications**: Sends reports via email to specified recipients.
+- **Customizable Profiles and Buckets**: Allows for logical organization of endpoints into profiles and buckets.
+- **Specialized Reporting Options**: Option to focus reports on hardware details or other endpoint specifics.
 
-## FAQs
-**Q**: We have all of our devices in audit mode but our reports are generating that those endpoints are compliant when in ISE under the Failed Conditions 
-I see hits for those endpoints. how come? 
+## Configuration
 
-**A**: Since ISE treats all audit Policies as Passes, this app will parse the posture Policy _AND NOT_ posture condition to give a more accurate totaling of endpoints status.
+The tool uses `config_templete.yaml` for its settings. Here are some key sections to configure:
 
-**Q**: In the reports my total endpoints and profiled endpoints are not matching my logical profiles buckets
+### General Report Settings
 
-**A**: As of ISE v3.1, it doest support the de-confliction of logical profile assigned to an endpoint. So if you have a 
-situation where you have the parent profile and child profile in the same ISE logical profile. ISE will just append the same logical profile to the endpoint. The same case holds true if you also assign the multiple logical profiles to the same endpoint
+- **Policy Name**: Define the NAC policy name with `policy_name`.
+- **Output Destination**: Set the `destination_filepath` for where the report should be saved.
+- **Notification Settings**: Toggle `send_email` to enable email notifications.
 
+### Authentication Settings
 
-## Requirements
-This app requires the following environment 
-```
-python >= 3.8
-Cisco ISE >= 3.3 
-```
+- **Certificate-Based**: Set `authentication.cert_based.use` to `True` and provide `cert_pfx_location` and `cert_password`.
+- **Text-Based**: Toggle `authentication.text_based.use` and provide `username` and `password` if preferred.
+- **ERS-Based**: Uses `ers_based.username` and `ers_based.password`. Please make sure this account has the correct permission in ISE
+
+### SMTP Configuration
+
+Set up email notifications with:
+
+```yaml
+smtp:
+  email: your_email@example.com
+  server: smtp.example.com
+  port: 25
+  destination_email: recipient@example.com
+  destination_email_cc:
+    - cc1@example.com
+    - cc2@example.com
