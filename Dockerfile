@@ -3,7 +3,7 @@ FROM --platform=linux/amd64 python:3.9-slim AS x86_64_image
 LABEL authors="Osamuede Obasuyi"
 LABEL description="This image contains a portable version of ColdClarity."
 LABEL version="1.0"
-LABEL license="GPL"
+LABEL license="MIT"
 
 
 COPY ./* ColdClarity/
