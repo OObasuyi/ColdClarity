@@ -94,10 +94,10 @@ class ISEReport:
 
         common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
-        get_all_posture_endpoints = "select POLICY,ENDPOINT_ID from posture_assessment_by_condition"
+        get_all_posture_endpoints = "select LOGGED_AT,POLICY,ENDPOINT_ID,POLICY_STATUS, CONDITION_NAME, CONDITION_STATUS from posture_assessment_by_condition"
         get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
         get_all_endpoints ="select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
-        get_portal_endpoints ="select MAC_ADDRESS, PORTAL_USER from ENDPOINTS_DATA"
+        get_portal_endpoints ="select GUEST_LAST_NAME,GUEST_FIRST_NAME,SSID,NAD_ADDRESS,MAC_ADDRESS from PRIMARY_GUEST"
 
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
         ep_auths = self.ise.dataconnect_engine(get_all_auths)
@@ -140,7 +140,7 @@ class ISEReport:
         # how many profiles we have
         writer.writerow(['Total Profiled Endpoints', ep_profiled_count])
         # if we are doing webauth or some type of auth
-        web_list = ep_web['mac_address'][ep_web['portal_user'] != 'none'].tolist()
+        web_list = ep_web['mac_address'].tolist()
         other_auth = ep_active[ep_active['calling_station_id'].isin(web_list)]
         writer.writerow(['Total Authenticated Other (SNMP etc)', other_auth.shape[0]])
 
@@ -182,7 +182,7 @@ class ISEReport:
             total_failed = 0
             for report_name,actual_name in posture_dicts.items():
                 for policy_name, policy_group in grouped_posture_policy:
-                    if actual_name == policy_name[0]:
+                    if actual_name.lower() == policy_name[0]:
                         # get all condition results where we passed or failed
                         # get the latest result
                         policy_group.sort_values(by='logged_at', inplace=True,ascending=False)

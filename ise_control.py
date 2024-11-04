@@ -138,6 +138,13 @@ class ISE:
         db_ssl_context.check_hostname = False
         db_ssl_context.verify_mode = CERT_NONE
         self.logger.debug('Connecting to ISE DB :)')
+
+        # DIAG FLAG for test
+        ep_amount = self.config.get('test_endpoint_pull')
+        if isinstance(ep_amount, int):
+            if ep_amount > 0:
+                sql_string = f'{sql_string} FETCH FIRST {ep_amount} ROWS ONLY'
+
         try:
             # connect to DB
             connection = oracledb.connect(
@@ -149,11 +156,11 @@ class ISE:
                 port=2484,
                 ssl_context=db_ssl_context
             )
-            # get as many rows as possible on a trip but dont overload mem if we dont have any 10K should be good size for the max amount from a query
+            # get as many rows as possible on a trip but dont overload mem if we dont have any 50K should be good size for the max amount from a query
             # https://oracle.github.io/python-oracledb/samples/tutorial/Python-and-Oracle-Database-The-New-Wave-of-Scripting.html#fetching
             cursor = connection.cursor()
-            cursor.prefetchrows = 10001
-            cursor.arraysize = 10000
+            cursor.prefetchrows = 50001
+            cursor.arraysize = 50000
             # get info from DB
             cursor.execute(sql_string)
             columns = [desc[0] for desc in cursor.description]
@@ -274,6 +281,13 @@ class ISE:
             header['_QPH_'] = header_data
             response = self.session.get(sw_url, headers=header)
 
+            # DIAG Flag
+            ep_amount = self.config.get('test_endpoint_pull')
+            if isinstance(ep_amount, int):
+                if ep_amount > 0:
+                    if len(endpoints) >= ep_amount:
+                        break
+
             if response.status_code == 200:
                 ep_data = response.json()
                 if len(ep_data) > 0:
@@ -326,6 +340,13 @@ class ISE:
             header = self.HEADER_DATA.copy()
             header['_QPH_'] = header_data
             response = self.session.get(url, headers=header)
+
+            # DIAG Flag
+            ep_amount = self.config.get('test_endpoint_pull')
+            if isinstance(ep_amount, int):
+                if ep_amount > 0:
+                    if len(endpoints) >= ep_amount:
+                        break
 
             if response.status_code == 200:
                 ep_data = response.json()
