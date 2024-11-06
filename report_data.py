@@ -95,9 +95,9 @@ class ISEReport:
         common_computing_profiles = 'server|red hat| hel|workstation|OSX'
         # db queries
         get_all_posture_endpoints = "select LOGGED_AT,POLICY,ENDPOINT_ID,POLICY_STATUS, CONDITION_NAME, CONDITION_STATUS from posture_assessment_by_condition"
-        get_all_auths = "select ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
+        get_all_auths = "select TIMESTAMP,ORIG_CALLING_STATION_ID,AUTHENTICATION_METHOD,AUTHENTICATION_PROTOCOL,POSTURE_STATUS,ENDPOINT_PROFILE from RADIUS_AUTHENTICATIONS"
         get_all_endpoints ="select B.LOGICAL_PROFILE, B.ASSIGNED_POLICIES, A.MAC_ADDRESS from ENDPOINTS_DATA A, LOGICAL_PROFILES B where A.ENDPOINT_POLICY = B.ASSIGNED_POLICIES"
-        get_portal_endpoints ="select GUEST_LAST_NAME,GUEST_FIRST_NAME,SSID,NAD_ADDRESS,MAC_ADDRESS from PRIMARY_GUEST"
+        get_portal_endpoints ="select LOGGED_AT,GUEST_LAST_NAME,GUEST_FIRST_NAME,SSID,NAD_ADDRESS,MAC_ADDRESS from PRIMARY_GUEST"
 
         ep_postured = self.ise.dataconnect_engine(get_all_posture_endpoints)
         ep_auths = self.ise.dataconnect_engine(get_all_auths)

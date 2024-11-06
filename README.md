@@ -21,6 +21,7 @@ ColdClarity is a tool designed to see data gathered by Cisco ISE from your netwo
 - **Automated Email Notifications**: Sends reports via email to specified recipients.
 - **Customizable Profiles and Buckets**: Allows for logical organization of endpoints into profiles and buckets.
 - **Specialized Reporting Options**: Option to focus reports on hardware details or other endpoint specifics.
+- **Time Based Options**: if you just want to pull a report on a certain time range or the past number of days.
 
 ## Configuration
 
@@ -74,6 +75,7 @@ logs are created and placed in the logging directory on run, you can also use a 
 
 ```yaml
 # DIAG
+test_endpoint_pull: 1 # if you want to get only a certain amount of endpoints back Useful if you want to test with a small portion of endpoints if you have alot
 test_messaging_svc: True # if you want to test pulling data without sending a email
 debug_console_login: ~ #outputs debug and higher to console
 ```

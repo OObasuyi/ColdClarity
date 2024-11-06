@@ -93,7 +93,8 @@ EndpointData:
 dataconnect:
   password: dcpassword1234
 
-
+# records for specific time dates can recorded as last N days or a range in a format such as "DD-MM-YYYY:DD-MM-YYYY"
+time_window: 90
 
 # DIAG
 test_endpoint_pull: 0

@@ -139,6 +139,26 @@ class ISE:
         db_ssl_context.verify_mode = CERT_NONE
         self.logger.debug('Connecting to ISE DB :)')
 
+        # FLAG FOR DATES
+        if self.config.get('time_window'):
+            # check to see what db column dt str we need if we need it if not skip section
+            dt_sql_str = None
+            if 'LOGGED_AT' in sql_string.upper():
+                dt_sql_str = 'LOGGED_AT'
+                self.logger.debug('changing sql string for "POSTURE_ASSESSMENT_BY_CONDITION"')
+            elif 'TIMESTAMP' in sql_string.upper():
+                dt_sql_str = 'TIMESTAMP'
+                self.logger.debug('changing sql string for "RADIUS_AUTHENTICATIONS"')
+
+            if dt_sql_str:
+                ep_dt_str, ep_dt_end = self.UTILS.get_time_range(self.config['time_window'], self)
+                if ep_dt_str and ep_dt_end:
+                    sql_string = (f"{sql_string} WHERE {dt_sql_str} BETWEEN "
+                                  f"TO_TIMESTAMP('{ep_dt_str} 00:00:00.000000', 'DD-MM-YYYY HH24:MI:SS.FF6') AND "
+                                  f"TO_TIMESTAMP('{ep_dt_end} 23:59:59.999999', 'DD-MM-YYYY HH24:MI:SS.FF6')")
+                else:
+                    self.logger.info('Could not retrieve time window info SKIPPING')
+
         # DIAG FLAG for test
         ep_amount = self.config.get('test_endpoint_pull')
         if isinstance(ep_amount, int):
@@ -294,7 +314,7 @@ class ISE:
                     endpoints += ep_data
                     step_page += 1
                 else:
-                    self.logger.critical(f'GESI: no HW data for endpoints on page {step_page}')
+                    self.logger.debug(f'GESI: no HW data for endpoints on page {step_page}')
                     break
             else:
                 self.logger.debug(f'GESI: received back response code {response.status_code} on data retrieval')
@@ -354,7 +374,7 @@ class ISE:
                     endpoints += ep_data
                     step_page += 1
                 else:
-                    self.logger.critical(f'GEHI: no HW data for endpoints on page {step_page}')
+                    self.logger.debug(f'GEHI: no HW data for endpoints on page {step_page}')
                     break
             else:
                 self.logger.debug(f'GEHI: received back response code {response.status_code} on data retrieval')
