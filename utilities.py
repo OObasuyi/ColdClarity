@@ -6,6 +6,8 @@ from urllib.parse import quote as url_quote
 from io import StringIO
 import yaml
 from re import sub
+from pandas import to_datetime, isna
+from datetime import datetime, timedelta
 
 import logging
 
@@ -95,6 +97,40 @@ class Rutils:
         else:
             return df_str
 
+    @staticmethod
+    def qualify_dt_str(dt_object:str):
+        potential_dt = to_datetime(dt_object,errors='coerce',format='%d-%m-%Y')
+        return potential_dt
+
+    @staticmethod
+    def get_last_n_date_from_now(n_date:int) -> tuple:
+        today = datetime.now()
+        n_date = today - timedelta(days=n_date)
+        today = today.strftime('%d-%m-%Y')
+        n_date = n_date.strftime('%d-%m-%Y')
+        return n_date, today
+
+    def get_time_range(self,time_range,self_instance) -> tuple:
+        ep_dt_str, ep_dt_end = None, None
+        ep_dt_info = time_range
+        if isinstance(ep_dt_info, int):
+            # make sure its pos val
+            ep_dt_info = abs(ep_dt_info)
+            ep_dt_str, ep_dt_end = self.get_last_n_date_from_now(ep_dt_info)
+        else:
+            # make sure we are only receiving a str val and splice
+            ep_dt_info = str(ep_dt_info)
+            ep_dt_info = ep_dt_info.split(':')
+            if len(ep_dt_info) > 1:
+                ep_dt_str = self.qualify_dt_str(ep_dt_info[0])
+                ep_dt_end = self.qualify_dt_str(ep_dt_info[1])
+                if isna(ep_dt_str) or isna(ep_dt_end):
+                    self_instance.logger.critical(f'Time window {ep_dt_info} is not a valid time window! ')
+                    return None,None
+                else:
+                    ep_dt_str = ep_dt_str.strftime('%d-%m-%Y')
+                    ep_dt_end = ep_dt_end.strftime('%d-%m-%Y')
+        return ep_dt_str, ep_dt_end
 
 def log_collector(log_all=False,file_name='ise_reporting_logs.log'):
     fName = Rutils().create_file_path('logging', file_name)
