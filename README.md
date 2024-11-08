@@ -8,6 +8,7 @@ ColdClarity is a tool designed to see data gathered by Cisco ISE from your netwo
 - [Configuration](#Configuration)
   - [General Report Settings](#General-Report-Settings) 
   - [Authentication Settings](#Authentication-Settings)
+  - [Time Range](#Time-Range)
   - [SMTP Configuration](#SMTP-Configuration)
 - [Usage](#usage)
   - [Source](#Source)
