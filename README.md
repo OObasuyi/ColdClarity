@@ -25,7 +25,7 @@ ColdClarity is a tool designed to see data gathered by Cisco ISE from your netwo
 
 ## Configuration
 
-The tool uses `config_templete.yaml` for its settings. Here are some key sections to configure:
+The tool uses `config_templete.yaml` for its settings which is found at [templates](templates/config_templete.yaml). Here are some key sections to configure:
 
 ### General Report Settings
 
@@ -38,6 +38,14 @@ The tool uses `config_templete.yaml` for its settings. Here are some key section
 - **Certificate-Based**: Set `authentication.cert_based.use` to `True` and provide `cert_pfx_location` and `cert_password`.
 - **Text-Based**: Toggle `authentication.text_based.use` and provide `username` and `password` if preferred.
 - **ERS-Based**: Uses `ers_based.username` and `ers_based.password`. Please make sure this account has the correct permission in ISE
+
+
+### Time Range
+This works well when RAM is limited, and you have many endpoints in ISE, allowing you to retrieve only the most recent information. \
+if you only want data for specific time ranges or for the past number of days you can use this:
+```yaml
+time_window: 15 # in days or a range such as 01-11-2024:06-11-2024
+```
 
 ### SMTP Configuration
 
