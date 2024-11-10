@@ -174,7 +174,6 @@ class ISEReport:
         writer.writerow([])
 
         # Posture compliance
-        # todo: make a switch to see what audits conditions are failing
         # get posture status by policy
         grouped_posture_policy = ep_postured.groupby(['policy','endpoint_id'])
         for posture_dicts in posture_cons:
